@@ -15,23 +15,77 @@
 #include "kiss_matcher_relocalization/kiss_matcher_relocalization.hpp"
 
 #include "pcl/common/transforms.h"
+#include "small_gicp/util/downsampling_omp.hpp"
 
 namespace kiss_matcher_relocalization
 {
 
-KissMatcherRelocalizationNode:KissMatcherRelocalizationNode(const rclcpp::NodeOptions & options)
-: Node("small_gicp_relocalization", options),
+KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeOptions & options)
+: Node("kiss_matcher_relocalization", options),
   result_t_(Eigen::Isometry3d::Identity())
 {
-    pcd_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-    "registered_scan", 10,
-    std::bind(&SmallGicpRelocalizationNode::registeredPcdCallback, this, std::placeholders::_1));
+  this->declare_parameter("num_threads", 4);
+  this->declare_parameter("num_neighbors", 20);
+  this->declare_parameter("global_leaf_size", 0.25);
+  this->declare_parameter("registered_leaf_size", 0.25);
+  this->declare_parameter("max_dist_sq", 1.0);
+  this->declare_parameter("map_frame", "map");
+  this->declare_parameter("odom_frame", "odom");
+  this->declare_parameter("base_frame", "");
+  this->declare_parameter("robot_base_frame", "");
+  this->declare_parameter("lidar_frame", "");
+  this->declare_parameter("prior_pcd_file", "");
+  this->declare_parameter("resolution", "");
 
-    initial_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("initialpose", 10);
+  this->get_parameter("num_threads", num_threads_);
+  this->get_parameter("num_neighbors", num_neighbors_);
+  this->get_parameter("global_leaf_size", global_leaf_size_);
+  this->get_parameter("registered_leaf_size", registered_leaf_size_);
+  this->get_parameter("max_dist_sq", max_dist_sq_);
+  this->get_parameter("map_frame", map_frame_);
+  this->get_parameter("odom_frame", odom_frame_);
+  this->get_parameter("base_frame", base_frame_);
+  this->get_parameter("robot_base_frame", robot_base_frame_);
+  this->get_parameter("lidar_frame", lidar_frame_);
+  this->get_parameter("prior_pcd_file", prior_pcd_file_);
+  this->get_parameter("resolution", resolution_);
 
-    tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-    tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
-    tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
+  pcd_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
+  "registered_scan", 10,
+  std::bind(&KissMatcherRelocalizationNode::registeredPcdCallback, this, std::placeholders::_1));
+
+  initial_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("initialpose", 10);
+
+  registered_scan_ = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+  global_map_ = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+
+  tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+  tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
+  tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
+
+  loadGlobalMap(prior_pcd_file_);
+
+  config_ = kiss_matcher::KISSMatcherConfig(resolution_);
+  kiss_matcher::KISSMatcher matcher(config_);
+
+  register_timer_ = this->create_wall_timer(
+  std::chrono::milliseconds(500),  // 2 Hz
+  std::bind(&KissMatcherRelocalizationNode::performMatcher, this));
+
+  transform_timer_ = this->create_wall_timer(
+  std::chrono::milliseconds(50),  // 20 Hz
+  std::bind(&KissMatcherRelocalizationNode::publishTransform, this));
+}
+
+void KissMatcherRelocalizationNode::registeredPcdCallback(
+  const sensor_msgs::msg::PointCloud2::SharedPtr msg)
+{
+  last_scan_time_ = msg->header.stamp;
+  current_scan_frame_id_ = msg->header.frame_id;
+
+  pcl::PointCloud<pcl::PointXYZ>::Ptr scan(new pcl::PointCloud<pcl::PointXYZ>());
+  pcl::fromROSMsg(*msg, *scan);
+  *registered_scan_ += *scan;
 }
 
 void KissMatcherRelocalizationNode::loadGlobalMap(const std::string & file_name)
@@ -62,7 +116,11 @@ void KissMatcherRelocalizationNode::loadGlobalMap(const std::string & file_name)
   pcl::transformPointCloud(*global_map_, *global_map_, odom_to_lidar_odom);
 }
 
-std::vector<Eigen::Vector3f> convertCloudToVec(const pcl::PointCloud<pcl::PointXYZ>& cloud) {
+
+std::vector<Eigen::Vector3f> KissMatcherRelocalizationNode::convertCloudToVec(const pcl::PointCloud<pcl::PointXYZ>& cloud)
+{
+return std::vector<Eigen::Vector3f>();
+}std::vector<Eigen::Vector3f> convertCloudToVec(const pcl::PointCloud<pcl::PointXYZ>& cloud) {
   std::vector<Eigen::Vector3f> vec;
   vec.reserve(cloud.size());
   for (const auto& pt : cloud.points) {
@@ -72,7 +130,33 @@ std::vector<Eigen::Vector3f> convertCloudToVec(const pcl::PointCloud<pcl::PointX
   return vec;
 }
 
-}  // namespace kiss_matcher_relocalization
+void KissMatcherRelocalizationNode::publishTransform()
+{
+  if (result_t_.matrix().isZero()) {
+    return;
+  }
+
+  geometry_msgs::msg::TransformStamped transform_stamped;
+  // `+ 0.1` means transform into future. according to https://robotics.stackexchange.com/a/96615
+  transform_stamped.header.stamp = last_scan_time_ + rclcpp::Duration::from_seconds(0.1);
+  transform_stamped.header.frame_id = map_frame_;
+  transform_stamped.child_frame_id = odom_frame_;
+
+  const Eigen::Vector3d translation = result_t_.translation();
+  const Eigen::Quaterniond rotation(result_t_.rotation());
+
+  transform_stamped.transform.translation.x = translation.x();
+  transform_stamped.transform.translation.y = translation.y();
+  transform_stamped.transform.translation.z = translation.z();
+  transform_stamped.transform.rotation.x = rotation.x();
+  transform_stamped.transform.rotation.y = rotation.y();
+  transform_stamped.transform.rotation.z = rotation.z();
+  transform_stamped.transform.rotation.w = rotation.w();
+
+  tf_broadcaster_->sendTransform(transform_stamped);
+}
+
+} // namespace kiss_matcher_relocalization
 
 #include "rclcpp_components/register_node_macro.hpp"
 RCLCPP_COMPONENTS_REGISTER_NODE(kiss_matcher_relocalization::KissMatcherRelocalizationNode)

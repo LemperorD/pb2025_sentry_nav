@@ -41,11 +41,20 @@ public:
 private:
   void registeredPcdCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
   void loadGlobalMap(const std::string & file_name);
-  std::vector<Eigen::Vector3f> convertCloudToVec;
+  std::vector<Eigen::Vector3f> convertCloudToVec(const pcl::PointCloud<pcl::PointXYZ>& cloud);
+  void publishTransform();
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pcd_sub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initial_pose_pub_;
 
+  std::string map_frame_;
+  std::string odom_frame_;
+  std::string prior_pcd_file_;
+  std::string base_frame_;
+  std::string robot_base_frame_;
+  std::string lidar_frame_;
+  std::string current_scan_frame_id_;
+  rclcpp::Time last_scan_time_;
   Eigen::Isometry3d result_t_;
 
   kiss_matcher::KISSMatcherConfig config_;
@@ -53,9 +62,8 @@ private:
 
   pcl::PointCloud<pcl::PointXYZ>::Ptr global_map_;
   pcl::PointCloud<pcl::PointXYZ>::Ptr registered_scan_;
-  pcl::PointCloud<pcl::PointXYZ>::Ptr accumulated_cloud_;
-  pcl::PointCloud<pcl::PointXYZ>::Ptr target_;
-  pcl::PointCloud<pcl::PointXYZ>::Ptr source_;
+  pcl::PointCloud<pcl::PointXYZ>::Ptr target_pcl;
+  pcl::PointCloud<pcl::PointXYZ>::Ptr source_pcl;
 
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
   std::unique_ptr<tf2_ros::TransformListener> tf_listener_;
