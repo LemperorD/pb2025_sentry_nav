@@ -43,9 +43,17 @@ private:
   void loadGlobalMap(const std::string & file_name);
   std::vector<Eigen::Vector3f> convertCloudToVec(const pcl::PointCloud<pcl::PointXYZ>& cloud);
   void publishTransform();
+  void performMatcher();
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pcd_sub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initial_pose_pub_;
+
+  // int num_threads_;
+  // int num_neighbors_;
+  float global_leaf_size_;
+  float registered_leaf_size_;
+  float max_dist_sq_;
+  float resolution_;
 
   std::string map_frame_;
   std::string odom_frame_;
@@ -59,11 +67,19 @@ private:
 
   kiss_matcher::KISSMatcherConfig config_;
   kiss_matcher::KISSMatcher matcher_;
+  kiss_matcher::RegistrationSolution solution_;
 
   pcl::PointCloud<pcl::PointXYZ>::Ptr global_map_;
   pcl::PointCloud<pcl::PointXYZ>::Ptr registered_scan_;
   pcl::PointCloud<pcl::PointXYZ>::Ptr target_pcl;
   pcl::PointCloud<pcl::PointXYZ>::Ptr source_pcl;
+  std::vector<Eigen::Vector3f> target_vec;
+  std::vector<Eigen::Vector3f> source_vec;
+  std::vector<int> src_indices;
+  std::vector<int> tgt_indices;
+
+  rclcpp::TimerBase::SharedPtr transform_timer_;
+  rclcpp::TimerBase::SharedPtr register_timer_;
 
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
   std::unique_ptr<tf2_ros::TransformListener> tf_listener_;

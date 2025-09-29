@@ -15,7 +15,11 @@
 #include "kiss_matcher_relocalization/kiss_matcher_relocalization.hpp"
 
 #include "pcl/common/transforms.h"
+#include "pcl_conversions/pcl_conversions.h"
+#include "pcl/filters/filter.h"
+
 #include "small_gicp/util/downsampling_omp.hpp"
+#include "small_gicp/pcl/pcl_point.hpp"
 
 namespace kiss_matcher_relocalization
 {
@@ -24,8 +28,8 @@ KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeO
 : Node("kiss_matcher_relocalization", options),
   result_t_(Eigen::Isometry3d::Identity())
 {
-  this->declare_parameter("num_threads", 4);
-  this->declare_parameter("num_neighbors", 20);
+  // this->declare_parameter("num_threads", 4);
+  // this->declare_parameter("num_neighbors", 20);
   this->declare_parameter("global_leaf_size", 0.25);
   this->declare_parameter("registered_leaf_size", 0.25);
   this->declare_parameter("max_dist_sq", 1.0);
@@ -37,8 +41,8 @@ KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeO
   this->declare_parameter("prior_pcd_file", "");
   this->declare_parameter("resolution", "");
 
-  this->get_parameter("num_threads", num_threads_);
-  this->get_parameter("num_neighbors", num_neighbors_);
+  // this->get_parameter("num_threads", num_threads_);
+  // this->get_parameter("num_neighbors", num_neighbors_);
   this->get_parameter("global_leaf_size", global_leaf_size_);
   this->get_parameter("registered_leaf_size", registered_leaf_size_);
   this->get_parameter("max_dist_sq", max_dist_sq_);
@@ -65,11 +69,13 @@ KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeO
 
   loadGlobalMap(prior_pcd_file_);
 
+  target_pcl = small_gicp::voxelgrid_sampling_omp<pcl::PointCloud<pcl::PointXYZ>>(*global_map_, global_leaf_size_);
+
   config_ = kiss_matcher::KISSMatcherConfig(resolution_);
   kiss_matcher::KISSMatcher matcher(config_);
 
   register_timer_ = this->create_wall_timer(
-  std::chrono::milliseconds(500),  // 2 Hz
+  std::chrono::milliseconds(100),  // 10 Hz
   std::bind(&KissMatcherRelocalizationNode::performMatcher, this));
 
   transform_timer_ = this->create_wall_timer(
@@ -116,11 +122,7 @@ void KissMatcherRelocalizationNode::loadGlobalMap(const std::string & file_name)
   pcl::transformPointCloud(*global_map_, *global_map_, odom_to_lidar_odom);
 }
 
-
-std::vector<Eigen::Vector3f> KissMatcherRelocalizationNode::convertCloudToVec(const pcl::PointCloud<pcl::PointXYZ>& cloud)
-{
-return std::vector<Eigen::Vector3f>();
-}std::vector<Eigen::Vector3f> convertCloudToVec(const pcl::PointCloud<pcl::PointXYZ>& cloud) {
+std::vector<Eigen::Vector3f> KissMatcherRelocalizationNode::convertCloudToVec(const pcl::PointCloud<pcl::PointXYZ>& cloud) {
   std::vector<Eigen::Vector3f> vec;
   vec.reserve(cloud.size());
   for (const auto& pt : cloud.points) {
@@ -128,6 +130,26 @@ return std::vector<Eigen::Vector3f>();
     vec.emplace_back(pt.x, pt.y, pt.z);
   }
   return vec;
+}
+
+void KissMatcherRelocalizationNode::performMatcher()
+{
+  if (registered_scan_->empty()) {
+    RCLCPP_WARN(this->get_logger(), "No accumulated points to process.");
+    return;
+  }
+
+  source_pcl = small_gicp::voxelgrid_sampling_omp<pcl::PointCloud<pcl::PointXYZ>>(*registered_scan_, registered_leaf_size_);
+
+  pcl::removeNaNFromPointCloud(*source_pcl, *source_pcl, src_indices);
+  pcl::removeNaNFromPointCloud(*target_pcl, *target_pcl, tgt_indices);
+
+  target_vec = convertCloudToVec(*target_pcl);
+  source_vec = convertCloudToVec(*source_pcl);
+  solution_ = matcher_.estimate(source_vec, target_vec);
+  result_t_.translation() = solution_.translation;
+  result_t_.linear() = solution_.rotation;
+  registered_scan_->clear();
 }
 
 void KissMatcherRelocalizationNode::publishTransform()
