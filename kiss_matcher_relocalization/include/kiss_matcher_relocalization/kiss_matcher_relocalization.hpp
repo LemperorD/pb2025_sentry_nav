@@ -30,6 +30,9 @@
 
 #include "pcl/io/pcd_io.h"
 
+#include <pcl/filters/voxel_grid.h>
+#include <memory>
+
 namespace kiss_matcher_relocalization
 {
 
@@ -66,8 +69,11 @@ private:
   Eigen::Isometry3d result_t_;
 
   kiss_matcher::KISSMatcherConfig config_;
-  kiss_matcher::KISSMatcher matcher_;
+  std::unique_ptr<kiss_matcher::KISSMatcher> matcher_;
   kiss_matcher::RegistrationSolution solution_;
+
+  pcl::VoxelGrid<pcl::PointXYZ> voxel_grid_global_;
+  pcl::VoxelGrid<pcl::PointXYZ> voxel_grid_local_;
 
   pcl::PointCloud<pcl::PointXYZ>::Ptr global_map_;
   pcl::PointCloud<pcl::PointXYZ>::Ptr registered_scan_;

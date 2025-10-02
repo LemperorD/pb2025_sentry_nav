@@ -69,10 +69,14 @@ KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeO
 
   loadGlobalMap(prior_pcd_file_);
 
-  target_pcl = small_gicp::voxelgrid_sampling_omp<pcl::PointCloud<pcl::PointXYZ>>(*global_map_, global_leaf_size_);
+  voxel_grid_global_.setInputCloud(global_map_);
+  voxel_grid_global_.setLeafSize(global_leaf_size_, global_leaf_size_, global_leaf_size_);
+  voxel_grid_global_.filter(*target_pcl);
+  pcl::removeNaNFromPointCloud(*target_pcl, *target_pcl, tgt_indices);
+  target_vec = convertCloudToVec(*target_pcl);
 
   config_ = kiss_matcher::KISSMatcherConfig(resolution_);
-  kiss_matcher::KISSMatcher matcher(config_);
+  matcher_ = std::make_unique<kiss_matcher::KISSMatcher>(config_);
 
   register_timer_ = this->create_wall_timer(
   std::chrono::milliseconds(100),  // 10 Hz
@@ -139,14 +143,13 @@ void KissMatcherRelocalizationNode::performMatcher()
     return;
   }
 
-  source_pcl = small_gicp::voxelgrid_sampling_omp<pcl::PointCloud<pcl::PointXYZ>>(*registered_scan_, registered_leaf_size_);
-
+  voxel_grid_local_.setInputCloud(registered_scan_);
+  voxel_grid_local_.setLeafSize(registered_leaf_size_, registered_leaf_size_, registered_leaf_size_);
+  voxel_grid_local_.filter(*source_pcl);
   pcl::removeNaNFromPointCloud(*source_pcl, *source_pcl, src_indices);
-  pcl::removeNaNFromPointCloud(*target_pcl, *target_pcl, tgt_indices);
-
-  target_vec = convertCloudToVec(*target_pcl);
   source_vec = convertCloudToVec(*source_pcl);
-  solution_ = matcher_.estimate(source_vec, target_vec);
+
+  solution_ = matcher_->estimate(source_vec, target_vec);
   result_t_.translation() = solution_.translation;
   result_t_.linear() = solution_.rotation;
   registered_scan_->clear();

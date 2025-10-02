@@ -1,15 +1,36 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.10)
 project(kiss_matcher_relocalization)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+set(CMAKE_CXX_STANDARD 17)
+
 # find dependencies
-find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_auto REQUIRED)
+ament_auto_find_build_dependencies()
+
+find_package(Eigen3 REQUIRED)
+find_package(teaserpp REQUIRED)
+find_package(PCL REQUIRED)
+find_package(robin REQUIRED)
+find_package(kiss_matcher REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
+
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
+
+ament_auto_add_library(${PROJECT_NAME} SHARED
+  DIRECTORY src
+)
+
+rclcpp_components_register_node(${PROJECT_NAME}
+  PLUGIN kiss_matcher_relocalization::KissMatcherRelocalizationNode
+  EXECUTABLE ${PROJECT_NAME}_node
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
