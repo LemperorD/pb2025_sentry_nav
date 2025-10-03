@@ -152,6 +152,7 @@ def generate_launch_description():
                 respawn_delay=2.0,
                 parameters=[configured_params, {"prior_pcd_file": prior_pcd_file}],
                 arguments=["--ros-args", "--log-level", log_level],
+                prefix='gdb -ex run --args',
             ),
             Node(
                 package="nav2_lifecycle_manager",

@@ -18,9 +18,6 @@
 #include "pcl_conversions/pcl_conversions.h"
 #include "pcl/filters/filter.h"
 
-#include "small_gicp/util/downsampling_omp.hpp"
-#include "small_gicp/pcl/pcl_point.hpp"
-
 namespace kiss_matcher_relocalization
 {
 
@@ -48,12 +45,6 @@ KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeO
   this->get_parameter("prior_pcd_file", prior_pcd_file_);
   this->get_parameter("resolution", resolution_);
 
-  pcd_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-  "registered_scan", 10,
-  std::bind(&KissMatcherRelocalizationNode::registeredPcdCallback, this, std::placeholders::_1));
-
-  initial_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("initialpose", 10);
-
   registered_scan_ = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
   global_map_ = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
 
@@ -62,6 +53,7 @@ KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeO
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
 
   loadGlobalMap(prior_pcd_file_);
+  RCLCPP_INFO(this->get_logger(), "Successfully load the prior_pcd_file");
 
   voxel_grid_global_.setInputCloud(global_map_);
   voxel_grid_global_.setLeafSize(global_leaf_size_, global_leaf_size_, global_leaf_size_);
@@ -71,6 +63,13 @@ KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeO
 
   config_ = kiss_matcher::KISSMatcherConfig(resolution_);
   matcher_ = std::make_unique<kiss_matcher::KISSMatcher>(config_);
+  RCLCPP_INFO(this->get_logger(), "Successfully build the matcher");
+
+  pcd_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
+  "registered_scan", 10,
+  std::bind(&KissMatcherRelocalizationNode::registeredPcdCallback, this, std::placeholders::_1));
+
+  // initial_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("initialpose", 10);
 
   register_timer_ = this->create_wall_timer(
   std::chrono::milliseconds(100),  // 10 Hz
@@ -118,6 +117,7 @@ void KissMatcherRelocalizationNode::loadGlobalMap(const std::string & file_name)
     }
   }
   pcl::transformPointCloud(*global_map_, *global_map_, odom_to_lidar_odom);
+  RCLCPP_INFO(this->get_logger(), "Successfully transform");
 }
 
 std::vector<Eigen::Vector3f> KissMatcherRelocalizationNode::convertCloudToVec(const pcl::PointCloud<pcl::PointXYZ>& cloud) {

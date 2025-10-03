@@ -7,6 +7,10 @@ endif()
 
 set(CMAKE_CXX_STANDARD 17)
 
+add_definitions(-Wall -Werror)
+
+add_compile_options(-fPIC)
+
 # find dependencies
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
@@ -25,6 +29,20 @@ link_directories(${PCL_LIBRARY_DIRS})
 
 ament_auto_add_library(${PROJECT_NAME} SHARED
   DIRECTORY src
+)
+
+target_link_libraries(${PROJECT_NAME}
+  kiss_matcher::kiss_matcher_core
+  teaserpp::teaser_registration
+  teaserpp::teaser_io
+  TBB::tbb
+  robin::robin
+  ${PCL_LIBRARIES_DIRS}
+)
+
+target_include_directories(${PROJECT_NAME} PUBLIC
+  ${PCL_INCLUDE_DIRS}
+  /usr/local/include
 )
 
 rclcpp_components_register_node(${PROJECT_NAME}

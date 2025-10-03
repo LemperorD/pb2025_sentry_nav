@@ -15,6 +15,7 @@
 #ifndef KISS_MATCHER_RELOCALIZATION_HPP
 #define KISS_MATCHER_RELOCALIZATION_HPP
 
+#include <memory>
 #include <vector>
 
 #include "rclcpp/rclcpp.hpp"
@@ -29,6 +30,7 @@
 #include "tf2_eigen/tf2_eigen.hpp"
 
 #include "pcl/io/pcd_io.h"
+#include "pcl/memory.h"
 
 #include <pcl/filters/voxel_grid.h>
 #include <memory>
@@ -39,6 +41,7 @@ namespace kiss_matcher_relocalization
 class KissMatcherRelocalizationNode : public rclcpp::Node
 {
 public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   explicit KissMatcherRelocalizationNode(const rclcpp::NodeOptions & options);
 
 private:
