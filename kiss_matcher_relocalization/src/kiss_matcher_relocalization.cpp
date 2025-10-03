@@ -28,24 +28,18 @@ KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeO
 : Node("kiss_matcher_relocalization", options),
   result_t_(Eigen::Isometry3d::Identity())
 {
-  // this->declare_parameter("num_threads", 4);
-  // this->declare_parameter("num_neighbors", 20);
   this->declare_parameter("global_leaf_size", 0.25);
   this->declare_parameter("registered_leaf_size", 0.25);
-  this->declare_parameter("max_dist_sq", 1.0);
   this->declare_parameter("map_frame", "map");
   this->declare_parameter("odom_frame", "odom");
   this->declare_parameter("base_frame", "");
   this->declare_parameter("robot_base_frame", "");
   this->declare_parameter("lidar_frame", "");
   this->declare_parameter("prior_pcd_file", "");
-  this->declare_parameter("resolution", "");
+  this->declare_parameter("resolution", 0.2);
 
-  // this->get_parameter("num_threads", num_threads_);
-  // this->get_parameter("num_neighbors", num_neighbors_);
   this->get_parameter("global_leaf_size", global_leaf_size_);
   this->get_parameter("registered_leaf_size", registered_leaf_size_);
-  this->get_parameter("max_dist_sq", max_dist_sq_);
   this->get_parameter("map_frame", map_frame_);
   this->get_parameter("odom_frame", odom_frame_);
   this->get_parameter("base_frame", base_frame_);
