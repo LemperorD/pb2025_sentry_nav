@@ -25,8 +25,6 @@ KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeO
 : Node("kiss_matcher_relocalization", options),
   result_t_(Eigen::Isometry3d::Identity())
 {
-  this->declare_parameter("global_leaf_size", 0.25);
-  this->declare_parameter("registered_leaf_size", 0.25);
   this->declare_parameter("map_frame", "map");
   this->declare_parameter("odom_frame", "odom");
   this->declare_parameter("base_frame", "");
@@ -34,9 +32,8 @@ KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeO
   this->declare_parameter("lidar_frame", "");
   this->declare_parameter("prior_pcd_file", "");
   this->declare_parameter("resolution", 0.2);
+  this->declare_parameter("use_quatro", true);
 
-  this->get_parameter("global_leaf_size", global_leaf_size_);
-  this->get_parameter("registered_leaf_size", registered_leaf_size_);
   this->get_parameter("map_frame", map_frame_);
   this->get_parameter("odom_frame", odom_frame_);
   this->get_parameter("base_frame", base_frame_);
@@ -44,36 +41,22 @@ KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeO
   this->get_parameter("lidar_frame", lidar_frame_);
   this->get_parameter("prior_pcd_file", prior_pcd_file_);
   this->get_parameter("resolution", resolution_);
+  this->get_parameter("use_quatro", use_quatro_);
 
   registered_scan_ = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
   global_map_ = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-
-  target_pcl = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-  source_pcl = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
 
   tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
   tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
 
   loadGlobalMap(prior_pcd_file_);
-  RCLCPP_INFO(this->get_logger(), "Successfully load the prior_pcd_file");
 
-  if (global_map_ && !global_map_->empty()) {
-    RCLCPP_INFO(this->get_logger(), "Start voxel target");
-    voxel_grid_global_.setInputCloud(global_map_);
-    RCLCPP_INFO(this->get_logger(), "1");
-    voxel_grid_global_.setLeafSize(global_leaf_size_, global_leaf_size_, global_leaf_size_);
-    RCLCPP_INFO(this->get_logger(), "2");
-    voxel_grid_global_.filter(*target_pcl);
-    RCLCPP_INFO(this->get_logger(), "3");
-  } else {
-    RCLCPP_WARN(this->get_logger(), "Global map is empty or null, skipping voxel filter");
-  }
-  pcl::removeNaNFromPointCloud(*target_pcl, *target_pcl, tgt_indices);
-  target_vec = convertCloudToVec(*target_pcl);
-  RCLCPP_INFO(this->get_logger(), "Successfully voxel target");
+  pcl::removeNaNFromPointCloud(*global_map_, *global_map_, tgt_indices);
+  target_vec = convertCloudToVec(*global_map_);
 
   config_ = kiss_matcher::KISSMatcherConfig(resolution_);
+  config_.use_quatro_ = use_quatro_;
   matcher_ = std::make_unique<kiss_matcher::KISSMatcher>(config_);
 
   pcd_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
@@ -147,15 +130,21 @@ void KissMatcherRelocalizationNode::performMatcher()
     return;
   }
 
-  voxel_grid_local_.setInputCloud(registered_scan_);
-  voxel_grid_local_.setLeafSize(registered_leaf_size_, registered_leaf_size_, registered_leaf_size_);
-  voxel_grid_local_.filter(*source_pcl);
-  pcl::removeNaNFromPointCloud(*source_pcl, *source_pcl, src_indices);
-  source_vec = convertCloudToVec(*source_pcl);
-
+  pcl::removeNaNFromPointCloud(*registered_scan_, *registered_scan_, src_indices);
+  source_vec = convertCloudToVec(*registered_scan_);
+  
   solution_ = matcher_->estimate(source_vec, target_vec);
-  result_t_.translation() = solution_.translation;
-  result_t_.linear() = solution_.rotation;
+
+  matcher_->print();
+  euler_ = solution_.rotation.eulerAngles(2, 1, 0);
+  time_ = getTime(*matcher_);
+  RCLCPP_INFO(this->get_logger(), "Time: %f", time_);
+
+  if (solution_.valid && matcher_->getNumFinalInliers() > 5) {
+    result_t_.translation() = solution_.translation;
+    result_t_.linear() = solution_.rotation;
+  }
+
   registered_scan_->clear();
 }
 
@@ -183,6 +172,17 @@ void KissMatcherRelocalizationNode::publishTransform()
   transform_stamped.transform.rotation.w = rotation.w();
 
   tf_broadcaster_->sendTransform(transform_stamped);
+}
+
+double KissMatcherRelocalizationNode::getTime(kiss_matcher::KISSMatcher& m)
+{
+  double t_p = m.getProcessingTime();
+  double t_e = m.getExtractionTime();
+  double t_r = m.getRejectionTime();
+  double t_m = m.getMatchingTime();
+  double t_s = m.getSolverTime();
+
+  return t_p + t_e + t_r + t_m + t_s;
 }
 
 } // namespace kiss_matcher_relocalization

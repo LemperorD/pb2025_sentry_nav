@@ -50,16 +50,13 @@ private:
   std::vector<Eigen::Vector3f> convertCloudToVec(const pcl::PointCloud<pcl::PointXYZ>& cloud);
   void publishTransform();
   void performMatcher();
+  double getTime(kiss_matcher::KISSMatcher& m);
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pcd_sub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initial_pose_pub_;
 
-  // int num_threads_;
-  // int num_neighbors_;
-  float global_leaf_size_;
-  float registered_leaf_size_;
-  float max_dist_sq_;
   float resolution_;
+  bool use_quatro_;
 
   std::string map_frame_;
   std::string odom_frame_;
@@ -75,13 +72,8 @@ private:
   std::unique_ptr<kiss_matcher::KISSMatcher> matcher_;
   kiss_matcher::RegistrationSolution solution_;
 
-  pcl::VoxelGrid<pcl::PointXYZ> voxel_grid_global_;
-  pcl::VoxelGrid<pcl::PointXYZ> voxel_grid_local_;
-
   pcl::PointCloud<pcl::PointXYZ>::Ptr global_map_;
   pcl::PointCloud<pcl::PointXYZ>::Ptr registered_scan_;
-  pcl::PointCloud<pcl::PointXYZ>::Ptr target_pcl;
-  pcl::PointCloud<pcl::PointXYZ>::Ptr source_pcl;
   std::vector<Eigen::Vector3f> target_vec;
   std::vector<Eigen::Vector3f> source_vec;
   std::vector<int> src_indices;
@@ -94,6 +86,9 @@ private:
   std::unique_ptr<tf2_ros::TransformListener> tf_listener_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
+  Eigen::Vector3d euler_;
+  double time_;
+  std::vector<std::pair<int, int>> corre_;
 };
 
 }  //namespace kiss_matcher_relocalization_node
