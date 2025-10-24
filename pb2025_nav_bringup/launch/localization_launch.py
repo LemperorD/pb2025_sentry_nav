@@ -183,6 +183,7 @@ def generate_launch_description():
                 plugin="small_gicp_relocalization::SmallGicpRelocalizationNode",
                 name="small_gicp_relocalization",
                 parameters=[configured_params, {"prior_pcd_file": prior_pcd_file}],
+                extra_arguments=[{'use_intra_process_comms': True}],
             ),
             ComposableNode(
                 package="nav2_lifecycle_manager",

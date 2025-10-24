@@ -271,24 +271,29 @@ def generate_launch_description():
                 plugin="loam_interface::LoamInterfaceNode",
                 name="loam_interface",
                 parameters=[configured_params],
+                extra_arguments=[{'use_intra_process_comms': True}],
             ),
             ComposableNode(
                 package="sensor_scan_generation",
                 plugin="sensor_scan_generation::SensorScanGenerationNode",
                 name="sensor_scan_generation",
                 parameters=[configured_params],
+                extra_arguments=[{'use_intra_process_comms': True}],
             ),
             ComposableNode(
                 package="fake_vel_transform",
                 plugin="fake_vel_transform::FakeVelTransform",
                 name="fake_vel_transform",
                 parameters=[configured_params],
+                extra_arguments=[{'use_intra_process_comms': True}],
+
             ),
             ComposableNode(
                 package="nav2_controller",
                 plugin="nav2_controller::ControllerServer",
                 name="controller_server",
                 parameters=[configured_params],
+                # extra_arguments=[{'use_intra_process_comms': True}],
                 remappings=[("cmd_vel", "cmd_vel_controller")],
             ),
             ComposableNode(
@@ -296,6 +301,7 @@ def generate_launch_description():
                 plugin="nav2_smoother::SmootherServer",
                 name="smoother_server",
                 parameters=[configured_params],
+                # extra_arguments=[{'use_intra_process_comms': True}],
             ),
             ComposableNode(
                 package="nav2_planner",
