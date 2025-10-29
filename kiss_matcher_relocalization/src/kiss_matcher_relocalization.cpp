@@ -63,8 +63,6 @@ KissMatcherRelocalizationNode::KissMatcherRelocalizationNode(const rclcpp::NodeO
   "registered_scan", 10,
   std::bind(&KissMatcherRelocalizationNode::registeredPcdCallback, this, std::placeholders::_1));
 
-  // initial_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("initialpose", 10);
-
   register_timer_ = this->create_wall_timer(
   std::chrono::milliseconds(100),  // 10 Hz
   std::bind(&KissMatcherRelocalizationNode::performMatcher, this));
