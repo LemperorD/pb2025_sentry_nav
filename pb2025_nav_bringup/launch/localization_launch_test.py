@@ -180,9 +180,9 @@ def generate_launch_description():
                 parameters=[configured_params],
             ),
             ComposableNode(
-                package="kiss_matcher_relocalization",
-                plugin="kiss_matcher_relocalization::KissMatcherRelocalizationNode",
-                name="kiss_matcher_relocalization",
+                package="buaa_sentry_relocalization",
+                plugin="buaa_sentry_relocalization::BuaaSentryRelocalizationNode",
+                name="buaa_sentry_relocalization",
                 parameters=[configured_params, {"prior_pcd_file": prior_pcd_file}],
             ),
             ComposableNode(

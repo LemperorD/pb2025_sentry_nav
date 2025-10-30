@@ -156,8 +156,8 @@ def generate_launch_description():
     )
 
     bringup_cmd = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(launch_dir, "bringup_launch.py")),
-        # PythonLaunchDescriptionSource(os.path.join(launch_dir, "bringup_launch_test.py")),
+        # PythonLaunchDescriptionSource(os.path.join(launch_dir, "bringup_launch.py")),
+        PythonLaunchDescriptionSource(os.path.join(launch_dir, "bringup_launch_test.py")),
         launch_arguments={
             "namespace": namespace,
             "slam": slam,
