@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef MINCO_SMOOTHER_HPP_
-#define MINCO_SMOOTHER_HPP_
+#ifndef NAV2_SMOOTHER__MINCO_SMOOTHER_HPP_
+#define NAV2_SMOOTHER__MINCO_SMOOTHER_HPP_
 
 #include <nav2_core/smoother.hpp>
 
