@@ -383,6 +383,7 @@ controller_server:
       translation_ki: 0.1
       translation_kd: 0.3
       enable_rotation: false
+      # enable_rotation: true
       rotation_kp: 3.0
       rotation_ki: 0.1
       rotation_kd: 0.3
@@ -396,6 +397,8 @@ controller_server:
       use_interpolation: false
       use_rotate_to_heading: false
       use_rotate_to_heading_treshold: 0.1
+      # use_rotate_to_heading: true
+      # use_rotate_to_heading_treshold: 0.0
       min_approach_linear_velocity: 0.5
       approach_velocity_scaling_dist: 1.0
       v_linear_min: -2.5

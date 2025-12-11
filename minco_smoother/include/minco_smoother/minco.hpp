@@ -362,17 +362,17 @@ public:
     return;
   }
 
-  inline void getTrajectory(Trajectory<7,2> &traj) const
-  {
-    traj.clear();
-    traj.reserve(N);
-    for (int i = 0; i < N; i++)
-    {
-      traj.emplace_back(T1(i),
-                        b.block<8, 2>(8 * i, 0).transpose().rowwise().reverse());
-    }
-    return;
-  }
+  // inline void getTrajectory(Trajectory<7,2> &traj) const
+  // {
+  //   traj.clear();
+  //   traj.reserve(N);
+  //   for (int i = 0; i < N; i++)
+  //   {
+  //     traj.emplace_back(T1(i),
+  //                       b.block<8, 2>(8 * i, 0).transpose().rowwise().reverse());
+  //   }
+  //   return;
+  // }
 
   inline void getEnergy(double &energy) const
   {
