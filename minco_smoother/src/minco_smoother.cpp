@@ -46,14 +46,157 @@ namespace minco_smoother
   bool MincoSmoother::smooth(nav_msgs::msg::Path & path, const rclcpp::Duration & max_time){
     flat_traj_ = getTrajDataFromPath(path);
 
+
+
+    return true;
   }
 
   FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path){
-    bool reversing_segment;
-    smoother_utils::updateApproximatePathOrientations(const_cast<nav_msgs::msg::Path &>(path), reversing_segment);
-
     Unoccupied_sample_trajs_.clear();
     double cur_theta;
+
+    Eigen::VectorXd state5d; state5d.resize(5);// x y theta dtheta ds 
+    state5d << path.poses[0].pose.position.x, path.poses[0].pose.position.y, 0, 0, 0;
+    Unoccupied_sample_trajs_.push_back(state5d); 
+    
+    cur_theta = atan2(path.poses[1].y - path.poses[0].y, path.poses[1].x - path.poses[0].x);
+    normalizeAngle(start_state_.z(), cur_theta);
+    state5d << start_state_.x(), start_state_.y(), cur_theta , cur_theta - start_state_.z(), 0;
+    Unoccupied_sample_trajs_.push_back(state5d); 
+    cur_theta = atan2(Unoccupied_path_[0].y() - Unoccupied_path_[1].y(), Unoccupied_path_[0].x() - Unoccupied_path_[1].x()) + M_PI;
+    normalizeAngle(start_state_.z(), cur_theta);
+    state5d << start_state_.x(), start_state_.y(), cur_theta , cur_theta - start_state_.z(), 0;
+    Unoccupied_sample_trajs_.push_back(state5d); // 2
+    
+    int path_size = Unoccupied_path_.size();
+    Eigen::VectorXd pt;
+    for(int i = 1; i<path_size-1; i++){ 
+        pt = Unoccupied_path_[i];
+
+        state5d << pt.x(), pt.y(), Unoccupied_sample_trajs_.back()[2], 0, sqrt(pow(pt.x() - Unoccupied_sample_trajs_.back()[0], 2) + pow(pt.y() - Unoccupied_sample_trajs_.back()[1], 2));
+        Unoccupied_sample_trajs_.push_back(state5d);
+        cur_theta = atan2(Unoccupied_path_[i+1].y() - Unoccupied_path_[i].y(), Unoccupied_path_[i+1].x() - Unoccupied_path_[i].x());
+        normalizeAngle(Unoccupied_sample_trajs_.back()[2], cur_theta);
+        state5d << pt.x(), pt.y(), cur_theta, cur_theta - Unoccupied_sample_trajs_.back()[2], 0;
+        Unoccupied_sample_trajs_.push_back(state5d);
+
+    }
+    pt = Unoccupied_path_.back();
+    state5d << pt.x(), pt.y(), Unoccupied_sample_trajs_.back()[2], 0, sqrt(pow(pt.x() - Unoccupied_sample_trajs_.back()[0], 2) + pow(pt.y() - Unoccupied_sample_trajs_.back()[1], 2));
+    Unoccupied_sample_trajs_.push_back(state5d);
+
+    cur_theta = end_state_.z();
+    normalizeAngle(Unoccupied_sample_trajs_.back()[2], cur_theta);
+    state5d << pt.x(), pt.y(), cur_theta, cur_theta - Unoccupied_sample_trajs_.back()[2], 0;
+    Unoccupied_sample_trajs_.push_back(state5d);
+
+    cut_Unoccupied_sample_trajs_.clear();
+
+
+    std::vector<double> Unoccupied_thetas;
+    std::vector<double> Unoccupied_pathlengths; 
+    std::vector<double> Unoccupied_Weightpathlengths; 
+
+    double Unoccupied_AllWeightingPathLength_ = 0; 
+    double Unoccupied_AllPathLength = 0;
+
+    bool if_cut = false;
+    Eigen::Vector3d cut_state = Unoccupied_sample_trajs_.back().head(3);
+
+    int PathNodeNum = Unoccupied_sample_trajs_.size();
+    cut_Unoccupied_sample_trajs_.push_back(Unoccupied_sample_trajs_[0]);
+    Unoccupied_thetas.push_back(Unoccupied_sample_trajs_[0][2]);
+    Unoccupied_pathlengths.push_back(0);
+    Unoccupied_Weightpathlengths.push_back(0);
+
+    
+    int pathnodeindex = 1;
+    for(; pathnodeindex<PathNodeNum&&!if_cut; pathnodeindex++){
+        Eigen::VectorXd pathnode = Unoccupied_sample_trajs_[pathnodeindex];
+        if(Unoccupied_AllPathLength + fabs(pathnode[4]) >= trajCutLength_ && pathnode[4] != 0){
+            if_cut = true;
+            
+            Eigen::Vector3d former_state = Unoccupied_sample_trajs_[pathnodeindex-1].head(3);
+            cut_state = former_state + (pathnode.head(3) - former_state) * (trajCutLength_ - Unoccupied_AllPathLength) / fabs(pathnode[4]);
+            Eigen::VectorXd state5d; state5d.resize(5);
+            state5d<<cut_state.x(), cut_state.y(), cut_state.z(), (trajCutLength_ - Unoccupied_AllPathLength)/fabs(pathnode[4]) * pathnode[3], trajCutLength_ - Unoccupied_AllPathLength;
+            cut_Unoccupied_sample_trajs_.push_back(state5d);
+            Unoccupied_thetas.push_back(state5d[2]);
+            Unoccupied_AllPathLength += state5d[4];
+            Unoccupied_pathlengths.push_back(Unoccupied_AllPathLength); 
+            Unoccupied_AllWeightingPathLength_ += yaw_weight_ * abs(state5d[3]) + distance_weight_ * abs(state5d[4]);
+            Unoccupied_Weightpathlengths.push_back(Unoccupied_AllWeightingPathLength_);
+
+            PathNodeNum = cut_Unoccupied_sample_trajs_.size();
+            break;
+        }
+        cut_Unoccupied_sample_trajs_.push_back(pathnode);
+        Unoccupied_thetas.push_back(pathnode[2]);
+        Unoccupied_AllPathLength += pathnode[4];
+        Unoccupied_pathlengths.push_back(Unoccupied_AllPathLength); 
+        Unoccupied_AllWeightingPathLength_ += yaw_weight_ * abs(pathnode[3]) + distance_weight_ * abs(pathnode[4]);
+        Unoccupied_Weightpathlengths.push_back(Unoccupied_AllWeightingPathLength_);
+    }
+
+    double totalTrajTime_ = evaluateDuration(Unoccupied_AllWeightingPathLength_, current_state_VAJ_.x(),0.0,max_vel_,max_acc_);
+    std::vector<Eigen::Vector3d> Unoccupied_traj_pts; // Store the sampled coordinates yaw, s, t
+    std::vector<Eigen::Vector3d> Unoccupied_positions; // Store the sampled coordinates x, y, yaw
+
+    double Unoccupied_totalTrajTime_ = totalTrajTime_;
+    double Unoccupied_sampletime;
+    int Unoccupied_PathNodeIndex = 1;
+
+    Unoccupied_sampletime = Unoccupied_totalTrajTime_ / std::max(int(Unoccupied_totalTrajTime_ / sampletime_ + 0.5), mintrajNum_);
+
+    PathNodeNum = cut_Unoccupied_sample_trajs_.size();
+    double tmparc = 0;
+
+    for(double samplet = Unoccupied_sampletime; samplet<Unoccupied_totalTrajTime_-1e-3; samplet+=Unoccupied_sampletime){
+        double arc = evaluateLength(samplet, Unoccupied_AllWeightingPathLength_, Unoccupied_totalTrajTime_, current_state_VAJ_.x(), 0.0, max_vel_, max_acc_);
+        for (int k = Unoccupied_PathNodeIndex; k<PathNodeNum; k++){
+            Eigen::VectorXd pathnode = cut_Unoccupied_sample_trajs_[k];
+            Eigen::VectorXd prepathnode = cut_Unoccupied_sample_trajs_[k-1];
+            tmparc = Unoccupied_Weightpathlengths[k];
+            if(tmparc >= arc){
+                Unoccupied_PathNodeIndex = k; 
+                double l1 = tmparc-arc;
+                double l = Unoccupied_Weightpathlengths[k]-Unoccupied_Weightpathlengths[k-1];
+                double interp_s = Unoccupied_pathlengths[k-1] + (l-l1)/l*(pathnode[4]);
+                double interp_yaw = cut_Unoccupied_sample_trajs_[k-1][2] + (l-l1)/l*(pathnode[3]);
+                Unoccupied_traj_pts.emplace_back(interp_yaw, interp_s, samplet);
+
+                double interp_x = l1/l*prepathnode[0] + (l-l1)/l*(pathnode[0]);
+                double interp_y = l1/l*prepathnode[1] + (l-l1)/l*(pathnode[1]);
+                Unoccupied_positions.emplace_back(interp_x, interp_y, interp_yaw);
+                break;
+            }
+        }
+    }
+
+    Eigen::MatrixXd startS;
+    Eigen::MatrixXd endS;
+    startS.resize(2,3);
+    endS.resize(2,3);  
+    Eigen::Vector2d startP(cut_Unoccupied_sample_trajs_[0][2],0);
+    Eigen::Vector2d finalP(cut_Unoccupied_sample_trajs_[PathNodeNum-1][2],Unoccupied_pathlengths[PathNodeNum-1]);
+    startS.col(0) = startP;
+    startS.block(0,1,1,2) = current_state_OAJ_.transpose().head(2);
+    startS.block(1,1,1,2) = current_state_VAJ_.transpose().head(2);
+    endS.col(0) = finalP;
+    endS.col(1).setZero();
+    endS.col(2).setZero();
+    flat_traj_.UnOccupied_traj_pts = Unoccupied_traj_pts;
+    flat_traj_.UnOccupied_initT = Unoccupied_sampletime;
+    flat_traj_.UnOccupied_positions = Unoccupied_positions;
+  
+    flat_traj_.start_state = startS;
+    flat_traj_.final_state = endS;
+    flat_traj_.start_state_XYTheta = start_state_;
+    // flat_traj_.final_state_XYTheta = end_state_;
+    flat_traj_.if_cut = if_cut;
+    flat_traj_.final_state_XYTheta = cut_state;
+
+    // flat_traj_.printFlatTrajData();
 
   }
 
