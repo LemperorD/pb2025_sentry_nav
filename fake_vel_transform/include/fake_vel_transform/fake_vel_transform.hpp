@@ -86,6 +86,7 @@ private:
   uint8_t chassis_state_;
 
   std::mutex cmd_vel_mutex_;
+  std::mutex tf_mutex_;
   geometry_msgs::msg::Twist::SharedPtr latest_cmd_vel_;
   double current_robot_base_angle_;
   rclcpp::Time last_controller_activate_time_;
