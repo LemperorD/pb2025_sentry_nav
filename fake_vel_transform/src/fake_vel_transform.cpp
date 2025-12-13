@@ -35,6 +35,7 @@ FakeVelTransform::FakeVelTransform(const rclcpp::NodeOptions & options)
   this->declare_parameter<std::string>("cmd_spin_topic", "cmd_spin");
   this->declare_parameter<std::string>("input_cmd_vel_topic", "");
   this->declare_parameter<std::string>("output_cmd_vel_topic", "");
+  this->declare_parameter<std::string>("chassis_state_topic", "chassis_state");
   this->declare_parameter<float>("init_spin_speed", 0.0);
 
   this->get_parameter("robot_base_frame", robot_base_frame_);
@@ -44,6 +45,7 @@ FakeVelTransform::FakeVelTransform(const rclcpp::NodeOptions & options)
   this->get_parameter("cmd_spin_topic", cmd_spin_topic_);
   this->get_parameter("input_cmd_vel_topic", input_cmd_vel_topic_);
   this->get_parameter("output_cmd_vel_topic", output_cmd_vel_topic_);
+  this->get_parameter("chassis_state_topic", chassis_state_topic_);
   this->get_parameter("init_spin_speed", spin_speed_);
 
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
@@ -56,6 +58,8 @@ FakeVelTransform::FakeVelTransform(const rclcpp::NodeOptions & options)
   cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
     input_cmd_vel_topic_, 10,
     std::bind(&FakeVelTransform::cmdVelCallback, this, std::placeholders::_1));
+  chassis_state_sub_ = this->create_subscription<example_interfaces::msg::UInt8>(
+    chassis_state_topic_, 1, std::bind(&FakeVelTransform::chassisStateCallback, this, std::placeholders::_1));
 
   odom_sub_filter_.subscribe(this, odom_topic_);
   local_plan_sub_filter_.subscribe(this, local_plan_topic_);
@@ -75,6 +79,11 @@ FakeVelTransform::FakeVelTransform(const rclcpp::NodeOptions & options)
   // 50Hz Timer to send transform from `robot_base_frame` to `fake_robot_base_frame`
   timer_ = this->create_wall_timer(
     std::chrono::milliseconds(20), std::bind(&FakeVelTransform::publishTransform, this));
+}
+
+void FakeVelTransform::chassisStateCallback(const example_interfaces::msg::UInt8::SharedPtr msg)
+{
+  chassis_state_ = msg->data;
 }
 
 void FakeVelTransform::cmdSpinCallback(const example_interfaces::msg::Float32::SharedPtr msg)

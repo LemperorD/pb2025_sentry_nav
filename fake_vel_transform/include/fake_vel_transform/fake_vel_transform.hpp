@@ -20,6 +20,7 @@
 #include <string>
 
 #include "example_interfaces/msg/float32.hpp"
+#include "example_interfaces/msg/u_int8.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "message_filters/subscriber.h"
 #include "message_filters/sync_policies/approximate_time.h"
@@ -28,6 +29,13 @@
 #include "nav_msgs/msg/path.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "tf2_ros/transform_broadcaster.h"
+
+typedef enum
+{
+  chassisFollowed = 1,
+  littleTES,
+  goHome,
+} chassisState;
 
 namespace fake_vel_transform
 {
@@ -44,12 +52,14 @@ private:
   void localPlanCallback(const nav_msgs::msg::Path::ConstSharedPtr & msg);
   void cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
   void cmdSpinCallback(example_interfaces::msg::Float32::SharedPtr msg);
+  void chassisStateCallback(example_interfaces::msg::UInt8::SharedPtr msg);
   void publishTransform();
   geometry_msgs::msg::Twist transformVelocity(
     const geometry_msgs::msg::Twist::SharedPtr & twist, float yaw_diff);
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
   rclcpp::Subscription<example_interfaces::msg::Float32>::SharedPtr cmd_spin_sub_;
+  rclcpp::Subscription<example_interfaces::msg::UInt8>::SharedPtr chassis_state_sub_;
 
   message_filters::Subscriber<nav_msgs::msg::Odometry> odom_sub_filter_;
   message_filters::Subscriber<nav_msgs::msg::Path> local_plan_sub_filter_;
@@ -70,7 +80,9 @@ private:
   std::string cmd_spin_topic_;
   std::string input_cmd_vel_topic_;
   std::string output_cmd_vel_topic_;
+  std::string chassis_state_topic_;
   float spin_speed_;
+  uint8_t chassis_state_;
 
   std::mutex cmd_vel_mutex_;
   geometry_msgs::msg::Twist::SharedPtr latest_cmd_vel_;
