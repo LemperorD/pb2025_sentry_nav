@@ -75,6 +75,7 @@ private:
 
   std::string robot_base_frame_;
   std::string fake_robot_base_frame_;
+  std::string chassis_frame_;
   std::string odom_topic_;
   std::string local_plan_topic_;
   std::string cmd_spin_topic_;

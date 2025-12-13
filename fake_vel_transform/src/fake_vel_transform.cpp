@@ -30,6 +30,7 @@ FakeVelTransform::FakeVelTransform(const rclcpp::NodeOptions & options)
 
   this->declare_parameter<std::string>("robot_base_frame", "gimbal_link");
   this->declare_parameter<std::string>("fake_robot_base_frame", "gimbal_link_fake");
+  this->declare_parameter<std::string>("chassis_frame", "gimbal_yaw_odom");
   this->declare_parameter<std::string>("odom_topic", "odom");
   this->declare_parameter<std::string>("local_plan_topic", "local_plan");
   this->declare_parameter<std::string>("cmd_spin_topic", "cmd_spin");
@@ -40,6 +41,7 @@ FakeVelTransform::FakeVelTransform(const rclcpp::NodeOptions & options)
 
   this->get_parameter("robot_base_frame", robot_base_frame_);
   this->get_parameter("fake_robot_base_frame", fake_robot_base_frame_);
+  this->get_parameter("chassis_frame", chassis_frame_);
   this->get_parameter("odom_topic", odom_topic_);
   this->get_parameter("local_plan_topic", local_plan_topic_);
   this->get_parameter("cmd_spin_topic", cmd_spin_topic_);
