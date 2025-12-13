@@ -16,6 +16,8 @@
 #define NAV2_SMOOTHER__MINCO_SMOOTHER_HPP_
 
 #include <nav2_core/smoother.hpp>
+#include <minco_smoother/traj_representation.hpp>
+#include <minco_smoother/minco.hpp>
 
 namespace minco_smoother
 {
@@ -79,6 +81,12 @@ public:
     const rclcpp::Duration & max_time) override;
 
 protected:
+  /**
+   * @brief representation trajectory data from path
+   * 
+   * @param path Input path
+   */
+  FlatTrajData getTrajDataFromPath(const nav_msgs::msg::Path & path);
 
 private:
   rclcpp_lifecycle::LifecycleNode::WeakPtr node_;
@@ -87,8 +95,13 @@ private:
   std::shared_ptr<nav2_costmap_2d::CostmapSubscriber> costmap_sub_;
   rclcpp::Logger logger_{rclcpp::get_logger("MincoSmoother")};
 
+  std::vector<Eigen::VectorXd> Unoccupied_sample_trajs_; // x y theta dtheta ds
+  std::vector<Eigen::VectorXd> cut_Unoccupied_sample_trajs_; // x y theta dtheta ds
+  FlatTrajData flat_traj_;
+  minco::Minco minco_solver_;
+
 };
 
 } // namespace minco_smoother
 
-#endif //MINCO_SMOOTHER_HPP_
+#endif //NAV2_SMOOTHER__MINCO_SMOOTHER_HPP_

@@ -17,6 +17,7 @@
 #include "nav2_core/exceptions.hpp"
 #include "nav2_util/geometry_utils.hpp"
 #include "nav2_util/node_utils.hpp"
+#include <nav2_smoother/smoother_utils.hpp>
 
 namespace minco_smoother
 {
@@ -42,8 +43,18 @@ namespace minco_smoother
 
   }
 
-  bool smooth(nav_msgs::msg::Path & path, const rclcpp::Duration & max_time){
-    
+  bool MincoSmoother::smooth(nav_msgs::msg::Path & path, const rclcpp::Duration & max_time){
+    flat_traj_ = getTrajDataFromPath(path);
+
+  }
+
+  FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path){
+    bool reversing_segment;
+    smoother_utils::updateApproximatePathOrientations(const_cast<nav_msgs::msg::Path &>(path), reversing_segment);
+
+    Unoccupied_sample_trajs_.clear();
+    double cur_theta;
+
   }
 
 }; // namespace minco_smoother
