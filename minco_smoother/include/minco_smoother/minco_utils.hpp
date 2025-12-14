@@ -25,6 +25,30 @@ void normalizeAngle(double from, double & to){
   while (to - from < -M_PI) to += 2.0 * M_PI;
 }
 
+// Use trapezoidal velocity profile to get the total time of the path
+double evaluateDuration(const double &length, const double &startV, const double &endV, const double &maxV, const double &maxA){
+  double critical_len; 
+  double startv2 = pow(startV,2);
+  double endv2 = pow(endV,2);
+  double maxv2 = pow(maxV,2);
+  if(startV>maxV){
+    startv2 = maxv2;
+  }
+  // if(endV>max_vel_){
+  if(endV>maxV){
+    endv2 = maxv2;
+  }
+
+  critical_len = (maxv2-startv2)/(2*maxA)+(maxv2-endv2)/(2*maxA);
+  if(length>=critical_len){
+    return (maxV-startV)/maxA+(maxV-endV)/maxA+(length-critical_len)/maxV;
+  }
+  else{
+    double tmpv = sqrt(0.5*(startv2+endv2+2*maxA*length));
+    return (tmpv-startV)/maxA + (tmpv-endV)/maxA;
+  }
+}
+
 }
 
 #endif // NAV2_SMOOTHER__MINCO_SMOOTHER_UTIL_HPP_
