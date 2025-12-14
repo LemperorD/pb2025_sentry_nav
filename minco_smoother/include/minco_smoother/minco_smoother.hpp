@@ -19,6 +19,9 @@
 #include <minco_smoother/traj_representation.hpp>
 #include <minco_smoother/minco.hpp>
 
+#include <tf2/utils.hpp>
+#include <minco_smoother/minco_utils.hpp>
+
 namespace minco_smoother
 {
 

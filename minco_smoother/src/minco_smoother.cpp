@@ -17,7 +17,6 @@
 #include "nav2_core/exceptions.hpp"
 #include "nav2_util/geometry_utils.hpp"
 #include "nav2_util/node_utils.hpp"
-#include <nav2_smoother/smoother_utils.hpp>
 
 namespace minco_smoother
 {
@@ -52,6 +51,7 @@ namespace minco_smoother
   }
 
   FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path){
+    //-------add Yaw and pathlength to each traj point---------
     Unoccupied_sample_trajs_.clear();
     double cur_theta;
 
@@ -59,39 +59,43 @@ namespace minco_smoother
     state5d << path.poses[0].pose.position.x, path.poses[0].pose.position.y, 0, 0, 0;
     Unoccupied_sample_trajs_.push_back(state5d); 
     
-    cur_theta = atan2(path.poses[1].y - path.poses[0].y, path.poses[1].x - path.poses[0].x);
-    normalizeAngle(start_state_.z(), cur_theta);
-    state5d << start_state_.x(), start_state_.y(), cur_theta , cur_theta - start_state_.z(), 0;
+    cur_theta = atan2(path.poses[1].pose.position.y - path.poses[0].pose.position.y, path.poses[1].pose.position.x - path.poses[0].pose.position.x);
+    normalizeAngle(0, cur_theta);
+    state5d << path.poses[0].pose.position.x, path.poses[0].pose.position.y, cur_theta , cur_theta, 0;
     Unoccupied_sample_trajs_.push_back(state5d); 
-    cur_theta = atan2(Unoccupied_path_[0].y() - Unoccupied_path_[1].y(), Unoccupied_path_[0].x() - Unoccupied_path_[1].x()) + M_PI;
-    normalizeAngle(start_state_.z(), cur_theta);
-    state5d << start_state_.x(), start_state_.y(), cur_theta , cur_theta - start_state_.z(), 0;
+    cur_theta = atan2(path.poses[0].pose.position.y - path.poses[1].pose.position.y, path.poses[0].pose.position.x - path.poses[1].pose.position.x) + M_PI;
+    normalizeAngle(0, cur_theta);
+    state5d << path.poses[0].pose.position.x, path.poses[0].pose.position.y, cur_theta , cur_theta, 0;
     Unoccupied_sample_trajs_.push_back(state5d); // 2
     
-    int path_size = Unoccupied_path_.size();
-    Eigen::VectorXd pt;
+    int path_size = path.poses.size();
+    geometry_msgs::msg::PoseStamped pt;
     for(int i = 1; i<path_size-1; i++){ 
-        pt = Unoccupied_path_[i];
+      pt = path.poses[i];
 
-        state5d << pt.x(), pt.y(), Unoccupied_sample_trajs_.back()[2], 0, sqrt(pow(pt.x() - Unoccupied_sample_trajs_.back()[0], 2) + pow(pt.y() - Unoccupied_sample_trajs_.back()[1], 2));
-        Unoccupied_sample_trajs_.push_back(state5d);
-        cur_theta = atan2(Unoccupied_path_[i+1].y() - Unoccupied_path_[i].y(), Unoccupied_path_[i+1].x() - Unoccupied_path_[i].x());
-        normalizeAngle(Unoccupied_sample_trajs_.back()[2], cur_theta);
-        state5d << pt.x(), pt.y(), cur_theta, cur_theta - Unoccupied_sample_trajs_.back()[2], 0;
-        Unoccupied_sample_trajs_.push_back(state5d);
-
+      state5d << pt.pose.position.x, pt.pose.position.y, Unoccupied_sample_trajs_.back()[2], 0, 
+                 hypot(pt.pose.position.x - Unoccupied_sample_trajs_.back()[0], pt.pose.position.y - Unoccupied_sample_trajs_.back()[1]);
+      Unoccupied_sample_trajs_.push_back(state5d);
+      cur_theta = atan2(path.poses[i+1].pose.position.y - path.poses[i+1].pose.position.y, 
+                        path.poses[i].pose.position.x - path.poses[i].pose.position.x);
+      normalizeAngle(Unoccupied_sample_trajs_.back()[2], cur_theta);
+      state5d << pt.pose.position.x, pt.pose.position.y, cur_theta, cur_theta - Unoccupied_sample_trajs_.back()[2], 0;
+      Unoccupied_sample_trajs_.push_back(state5d);
     }
-    pt = Unoccupied_path_.back();
-    state5d << pt.x(), pt.y(), Unoccupied_sample_trajs_.back()[2], 0, sqrt(pow(pt.x() - Unoccupied_sample_trajs_.back()[0], 2) + pow(pt.y() - Unoccupied_sample_trajs_.back()[1], 2));
+
+    pt = path.poses.back();
+    state5d << pt.pose.position.x, pt.pose.position.y, Unoccupied_sample_trajs_.back()[2], 0, 
+               hypot(pt.pose.position.x - Unoccupied_sample_trajs_.back()[0], pt.pose.position.y - Unoccupied_sample_trajs_.back()[1]);
     Unoccupied_sample_trajs_.push_back(state5d);
 
-    cur_theta = end_state_.z();
+    cur_theta = tf2::getYaw(pt.pose.orientation);
     normalizeAngle(Unoccupied_sample_trajs_.back()[2], cur_theta);
-    state5d << pt.x(), pt.y(), cur_theta, cur_theta - Unoccupied_sample_trajs_.back()[2], 0;
+    state5d << pt.pose.position.x, pt.pose.position.y, cur_theta, cur_theta - Unoccupied_sample_trajs_.back()[2], 0;
     Unoccupied_sample_trajs_.push_back(state5d);
+    //-------add Yaw and pathlength to each traj point finish---------
 
+    //-------cut traj to specified length---------
     cut_Unoccupied_sample_trajs_.clear();
-
 
     std::vector<double> Unoccupied_thetas;
     std::vector<double> Unoccupied_pathlengths; 
