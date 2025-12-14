@@ -39,7 +39,42 @@ namespace minco_smoother
   std::string name, std::shared_ptr<tf2_ros::Buffer> tf,
   std::shared_ptr<nav2_costmap_2d::CostmapSubscriber> costmap_sub,
   std::shared_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub){
+    auto node = parent.lock();
+    node_ = parent;
+    if (!node) {
+      throw nav2_core::PlannerException("Unable to lock node!");
+    }
 
+    costmap_sub_ = costmap_sub;
+    tf_ = tf;
+    plugin_name_ = name;
+    logger_ = node->get_logger();
+
+    //---declare parameters---
+    declare_parameter_if_not_declared(node, plugin_name_ + ".max_velocity", rclcpp::ParameterValue(0.9));
+    declare_parameter_if_not_declared(node, plugin_name_ + ".max_acc", rclcpp::ParameterValue(0.9));
+    declare_parameter_if_not_declared(node, plugin_name_ + ".max_omega", rclcpp::ParameterValue(0.9));
+    declare_parameter_if_not_declared(node, plugin_name_ + ".max_domega", rclcpp::ParameterValue(0.9));
+    declare_parameter_if_not_declared(node, plugin_name_ + ".safe_distance", rclcpp::ParameterValue(0.9));
+    declare_parameter_if_not_declared(node, plugin_name_ + ".max_jps_dis", rclcpp::ParameterValue(0.9));
+    declare_parameter_if_not_declared(node, plugin_name_ + ".distance_weight", rclcpp::ParameterValue(0.9));
+    declare_parameter_if_not_declared(node, plugin_name_ + ".yaw_weight", rclcpp::ParameterValue(0.9));
+    declare_parameter_if_not_declared(node, plugin_name_ + ".traj_cut_length", rclcpp::ParameterValue(0.9));
+    declare_parameter_if_not_declared(node, plugin_name_ + ".min_traj_num", rclcpp::ParameterValue(0.9));
+    declare_parameter_if_not_declared(node, plugin_name_ + ".sample_time", rclcpp::ParameterValue(0.9));
+    
+    //---get parameters---
+    node->get_parameter(plugin_name_ + ".max_velocity", max_vel_);
+    node->get_parameter(plugin_name_ + ".max_acc", max_acc_);
+    node->get_parameter(plugin_name_ + ".max_omega", max_omega_);
+    node->get_parameter(plugin_name_ + ".max_domega", max_domega_);
+    node->get_parameter(plugin_name_ + ".safe_distance", safe_dis_);
+    node->get_parameter(plugin_name_ + ".max_jps_dis", max_jps_dis_);
+    node->get_parameter(plugin_name_ + ".distance_weight", distance_weight_);
+    node->get_parameter(plugin_name_ + ".yaw_weight", yaw_weight_);
+    node->get_parameter(plugin_name_ + ".traj_cut_length", trajCutLength_);
+    node->get_parameter(plugin_name_ + ".min_traj_num", mintrajNum_);
+    node->get_parameter(plugin_name_ + ".sample_time", sampletime_);
   }
 
   bool MincoSmoother::smooth(nav_msgs::msg::Path & path, const rclcpp::Duration & max_time){
@@ -95,9 +130,6 @@ namespace minco_smoother
     Unoccupied_sample_trajs_.push_back(state5d);
     //-------add Yaw and pathlength to each traj point finish---------
 
-    //-------cut traj to specified length---------
-    cut_Unoccupied_sample_trajs_.clear();
-
     std::vector<double> Unoccupied_thetas;
     std::vector<double> Unoccupied_pathlengths; 
     std::vector<double> Unoccupied_Weightpathlengths; 
@@ -105,41 +137,35 @@ namespace minco_smoother
     double Unoccupied_AllWeightingPathLength_ = 0; 
     double Unoccupied_AllPathLength = 0;
 
-    bool if_cut = false;
-    Eigen::Vector3d cut_state = Unoccupied_sample_trajs_.back().head(3);
-
     int PathNodeNum = Unoccupied_sample_trajs_.size();
     cut_Unoccupied_sample_trajs_.push_back(Unoccupied_sample_trajs_[0]);
     Unoccupied_thetas.push_back(Unoccupied_sample_trajs_[0][2]);
-    Unoccupied_pathlengths.push_back(0);
+    Unoccupied_pathlengths.push_back(0);    
     Unoccupied_Weightpathlengths.push_back(0);
 
     int pathnodeindex = 1;
-    for(; pathnodeindex<PathNodeNum&&!if_cut; pathnodeindex++){
-        Eigen::VectorXd pathnode = Unoccupied_sample_trajs_[pathnodeindex];
-        if(Unoccupied_AllPathLength + fabs(pathnode[4]) >= trajCutLength_ && pathnode[4] != 0){
-            if_cut = true;
-            
-            Eigen::Vector3d former_state = Unoccupied_sample_trajs_[pathnodeindex-1].head(3);
-            cut_state = former_state + (pathnode.head(3) - former_state) * (trajCutLength_ - Unoccupied_AllPathLength) / fabs(pathnode[4]);
-            Eigen::VectorXd state5d; state5d.resize(5);
-            state5d<<cut_state.x(), cut_state.y(), cut_state.z(), (trajCutLength_ - Unoccupied_AllPathLength)/fabs(pathnode[4]) * pathnode[3], trajCutLength_ - Unoccupied_AllPathLength;
-            cut_Unoccupied_sample_trajs_.push_back(state5d);
-            Unoccupied_thetas.push_back(state5d[2]);
-            Unoccupied_AllPathLength += state5d[4];
-            Unoccupied_pathlengths.push_back(Unoccupied_AllPathLength); 
-            Unoccupied_AllWeightingPathLength_ += yaw_weight_ * abs(state5d[3]) + distance_weight_ * abs(state5d[4]);
-            Unoccupied_Weightpathlengths.push_back(Unoccupied_AllWeightingPathLength_);
+    for(; pathnodeindex<PathNodeNum; pathnodeindex++){
+      Eigen::VectorXd pathnode = Unoccupied_sample_trajs_[pathnodeindex];   
+      Eigen::Vector3d former_state = Unoccupied_sample_trajs_[pathnodeindex-1].head(3);
+      cut_state = former_state + (pathnode.head(3) - former_state) * (trajCutLength_ - Unoccupied_AllPathLength) / fabs(pathnode[4]);
+      Eigen::VectorXd state5d; state5d.resize(5);
+      state5d<<cut_state.x(), cut_state.y(), cut_state.z(), (trajCutLength_ - Unoccupied_AllPathLength)/fabs(pathnode[4]) * pathnode[3], trajCutLength_ - Unoccupied_AllPathLength;
+      cut_Unoccupied_sample_trajs_.push_back(state5d);
+      Unoccupied_thetas.push_back(state5d[2]);
+      Unoccupied_AllPathLength += state5d[4];
+      Unoccupied_pathlengths.push_back(Unoccupied_AllPathLength); 
+      Unoccupied_AllWeightingPathLength_ += yaw_weight_ * abs(state5d[3]) + distance_weight_ * abs(state5d[4]);
+      Unoccupied_Weightpathlengths.push_back(Unoccupied_AllWeightingPathLength_);
 
-            PathNodeNum = cut_Unoccupied_sample_trajs_.size();
-            break;
-        }
-        cut_Unoccupied_sample_trajs_.push_back(pathnode);
-        Unoccupied_thetas.push_back(pathnode[2]);
-        Unoccupied_AllPathLength += pathnode[4];
-        Unoccupied_pathlengths.push_back(Unoccupied_AllPathLength); 
-        Unoccupied_AllWeightingPathLength_ += yaw_weight_ * abs(pathnode[3]) + distance_weight_ * abs(pathnode[4]);
-        Unoccupied_Weightpathlengths.push_back(Unoccupied_AllWeightingPathLength_);
+        PathNodeNum = cut_Unoccupied_sample_trajs_.size();
+        break;
+      }
+      cut_Unoccupied_sample_trajs_.push_back(pathnode);
+      Unoccupied_thetas.push_back(pathnode[2]);
+      Unoccupied_AllPathLength += pathnode[4];
+      Unoccupied_pathlengths.push_back(Unoccupied_AllPathLength); 
+      Unoccupied_AllWeightingPathLength_ += yaw_weight_ * abs(pathnode[3]) + distance_weight_ * abs(pathnode[4]);
+      Unoccupied_Weightpathlengths.push_back(Unoccupied_AllWeightingPathLength_);
     }
 
     double totalTrajTime_ = evaluateDuration(Unoccupied_AllWeightingPathLength_, current_state_VAJ_.x(),0.0,max_vel_,max_acc_);
