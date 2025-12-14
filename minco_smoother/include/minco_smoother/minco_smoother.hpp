@@ -91,6 +91,10 @@ protected:
    */
   FlatTrajData getTrajDataFromPath(const nav_msgs::msg::Path & path);
 
+  void minco_plan(FlatTrajData & flat_traj);
+
+  void optimizeTraj(FlatTrajData & flat_traj);
+
 private:
   rclcpp_lifecycle::LifecycleNode::WeakPtr node_;
   std::shared_ptr<tf2_ros::Buffer> tf_;
