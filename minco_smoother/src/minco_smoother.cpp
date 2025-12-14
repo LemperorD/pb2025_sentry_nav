@@ -27,11 +27,11 @@ namespace minco_smoother
   }
 
   void MincoSmoother::activate(){
-
+    RCLCPP_INFO(logger_, "Activating Minco Smoother");
   }
 
   void MincoSmoother::deactivate(){
-    
+    RCLCPP_INFO(logger_, "Deactivating Minco Smoother");
   }
 
   void MincoSmoother::configure(
@@ -62,7 +62,8 @@ namespace minco_smoother
     cur_theta = atan2(path.poses[1].pose.position.y - path.poses[0].pose.position.y, path.poses[1].pose.position.x - path.poses[0].pose.position.x);
     normalizeAngle(0, cur_theta);
     state5d << path.poses[0].pose.position.x, path.poses[0].pose.position.y, cur_theta , cur_theta, 0;
-    Unoccupied_sample_trajs_.push_back(state5d); 
+    Unoccupied_sample_trajs_.push_back(state5d);
+
     cur_theta = atan2(path.poses[0].pose.position.y - path.poses[1].pose.position.y, path.poses[0].pose.position.x - path.poses[1].pose.position.x) + M_PI;
     normalizeAngle(0, cur_theta);
     state5d << path.poses[0].pose.position.x, path.poses[0].pose.position.y, cur_theta , cur_theta, 0;
@@ -113,7 +114,6 @@ namespace minco_smoother
     Unoccupied_pathlengths.push_back(0);
     Unoccupied_Weightpathlengths.push_back(0);
 
-    
     int pathnodeindex = 1;
     for(; pathnodeindex<PathNodeNum&&!if_cut; pathnodeindex++){
         Eigen::VectorXd pathnode = Unoccupied_sample_trajs_[pathnodeindex];
@@ -199,8 +199,6 @@ namespace minco_smoother
     // flat_traj_.final_state_XYTheta = end_state_;
     flat_traj_.if_cut = if_cut;
     flat_traj_.final_state_XYTheta = cut_state;
-
-    // flat_traj_.printFlatTrajData();
 
   }
 
