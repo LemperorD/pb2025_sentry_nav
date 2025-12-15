@@ -103,7 +103,6 @@ private:
   rclcpp::Logger logger_{rclcpp::get_logger("MincoSmoother")};
 
   std::vector<Eigen::VectorXd> Unoccupied_sample_trajs_; // x y theta dtheta ds
-  std::vector<Eigen::VectorXd> cut_Unoccupied_sample_trajs_; // x y theta dtheta ds
   FlatTrajData flat_traj_;
   minco::Minco minco_solver_;
 

@@ -138,26 +138,13 @@ namespace minco_smoother
     double Unoccupied_AllPathLength = 0;
 
     int PathNodeNum = Unoccupied_sample_trajs_.size();
-    cut_Unoccupied_sample_trajs_.push_back(Unoccupied_sample_trajs_[0]);
     Unoccupied_thetas.push_back(Unoccupied_sample_trajs_[0][2]);
     Unoccupied_pathlengths.push_back(0);    
     Unoccupied_Weightpathlengths.push_back(0);
 
     int pathnodeindex = 1;
     for(; pathnodeindex<PathNodeNum; pathnodeindex++){
-      Eigen::VectorXd pathnode = Unoccupied_sample_trajs_[pathnodeindex];   
-      Eigen::Vector3d former_state = Unoccupied_sample_trajs_[pathnodeindex-1].head(3);
-      cut_state = former_state + (pathnode.head(3) - former_state) * (trajCutLength_ - Unoccupied_AllPathLength) / fabs(pathnode[4]);
-      Eigen::VectorXd state5d; state5d.resize(5);
-      state5d<<cut_state.x(), cut_state.y(), cut_state.z(), (trajCutLength_ - Unoccupied_AllPathLength)/fabs(pathnode[4]) * pathnode[3], trajCutLength_ - Unoccupied_AllPathLength;
-      Unoccupied_thetas.push_back(state5d[2]);
-      Unoccupied_AllPathLength += state5d[4];
-      Unoccupied_pathlengths.push_back(Unoccupied_AllPathLength); 
-      Unoccupied_AllWeightingPathLength_ += yaw_weight_ * abs(state5d[3]) + distance_weight_ * abs(state5d[4]);
-      Unoccupied_Weightpathlengths.push_back(Unoccupied_AllWeightingPathLength_);
-
-      PathNodeNum = cut_Unoccupied_sample_trajs_.size();
-      cut_Unoccupied_sample_trajs_.push_back(pathnode);
+      Eigen::VectorXd pathnode = Unoccupied_sample_trajs_[pathnodeindex];
       Unoccupied_thetas.push_back(pathnode[2]);
       Unoccupied_AllPathLength += pathnode[4];
       Unoccupied_pathlengths.push_back(Unoccupied_AllPathLength); 
@@ -175,21 +162,20 @@ namespace minco_smoother
 
     Unoccupied_sampletime = Unoccupied_totalTrajTime_ / std::max(int(Unoccupied_totalTrajTime_ / sampletime_ + 0.5), mintrajNum_);
 
-    PathNodeNum = cut_Unoccupied_sample_trajs_.size();
     double tmparc = 0;
 
     for(double samplet = Unoccupied_sampletime; samplet<Unoccupied_totalTrajTime_-1e-3; samplet+=Unoccupied_sampletime){
         double arc = evaluateLength(samplet, Unoccupied_AllWeightingPathLength_, Unoccupied_totalTrajTime_, current_state_VAJ_.x(), 0.0, max_vel_, max_acc_);
         for (int k = Unoccupied_PathNodeIndex; k<PathNodeNum; k++){
-            Eigen::VectorXd pathnode = cut_Unoccupied_sample_trajs_[k];
-            Eigen::VectorXd prepathnode = cut_Unoccupied_sample_trajs_[k-1];
+            Eigen::VectorXd pathnode = Unoccupied_sample_trajs_[k];
+            Eigen::VectorXd prepathnode = Unoccupied_sample_trajs_[k-1];
             tmparc = Unoccupied_Weightpathlengths[k];
             if(tmparc >= arc){
                 Unoccupied_PathNodeIndex = k; 
                 double l1 = tmparc-arc;
                 double l = Unoccupied_Weightpathlengths[k]-Unoccupied_Weightpathlengths[k-1];
                 double interp_s = Unoccupied_pathlengths[k-1] + (l-l1)/l*(pathnode[4]);
-                double interp_yaw = cut_Unoccupied_sample_trajs_[k-1][2] + (l-l1)/l*(pathnode[3]);
+                double interp_yaw = Unoccupied_sample_trajs_[k-1][2] + (l-l1)/l*(pathnode[3]);
                 Unoccupied_traj_pts.emplace_back(interp_yaw, interp_s, samplet);
 
                 double interp_x = l1/l*prepathnode[0] + (l-l1)/l*(pathnode[0]);
@@ -219,10 +205,10 @@ namespace minco_smoother
     flat_traj_.start_state = startS;
     flat_traj_.final_state = endS;
     flat_traj_.start_state_XYTheta = start_state_;
-    // flat_traj_.final_state_XYTheta = end_state_;
-    flat_traj_.if_cut = if_cut;
-    flat_traj_.final_state_XYTheta = cut_state;
-
+    flat_traj_.final_state_XYTheta = end_state_;
+    flat_traj_.if_cut = false;
+    
+    return flat_traj_;
   }
 
   void MincoSmoother::minco_plan(FlatTrajData & flat_traj){

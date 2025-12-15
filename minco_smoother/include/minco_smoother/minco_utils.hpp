@@ -49,6 +49,47 @@ double evaluateDuration(const double &length, const double &startV, const double
   }
 }
 
+// Use trapezoidal velocity profile to get the distance at the curt timestamp
+double evaluateLength(const double &curt, const double &locallength, const double &localtime, const double &startV, const double &endV, const double &maxV, const double &maxA){
+  // std::cout<<"curt: "<<curt<<"  locallength: "<<locallength<<"  localtime: "<<localtime<<"  startV: "<<startV<<"  endV: "<<endV<<"  maxV: "<<maxV<<"  maxA: "<<maxA<<std::endl;
+  double critical_len; 
+  double startv2 = pow(startV,2);
+  double endv2 = pow(endV,2);
+  double maxv2 = pow(maxV,2);
+  if(startV>maxV){
+    startv2 = maxv2;
+  }
+  if(endV>maxV){
+    endv2 = maxv2;
+  }
+
+  critical_len = (maxv2-startv2)/(2*maxA)+(maxv2-endv2)/(2*maxA);
+  // Get time from trapezoidal velocity profile
+  if(locallength>=critical_len){// If locallength is greater than critical_len, accelerate to max speed and then decelerate
+    double t1 = (maxV-startV)/maxA;
+    double t2 = t1+(locallength-critical_len)/maxV;
+    if(curt<=t1){
+      return startV*curt + 0.5*maxA*pow(curt,2);
+    }
+    else if(curt<=t2){
+      return startV*t1 + 0.5*maxA*pow(t1,2)+(curt-t1)*maxV;
+    }
+    else{
+      return startV*t1 + 0.5*maxA*pow(t1,2) + (t2-t1)*maxV + maxV*(curt-t2)-0.5*maxA*pow(curt-t2,2);
+    }
+  }
+  else{// If locallength is less than critical_len, decelerate without accelerating to max speed
+    double tmpv = sqrt(0.5*(startv2+endv2+2*maxA*locallength));
+    double tmpt = (tmpv-startV)/maxA;
+    if(curt<=tmpt){
+      return startV*curt+0.5*maxA*pow(curt,2);
+    }
+    else{
+      return startV*tmpt+0.5*maxA*pow(tmpt,2) + tmpv*(curt-tmpt)-0.5*maxA*pow(curt-tmpt,2);
+    }
+  }
+}
+
 }
 
 #endif // NAV2_SMOOTHER__MINCO_SMOOTHER_UTIL_HPP_
