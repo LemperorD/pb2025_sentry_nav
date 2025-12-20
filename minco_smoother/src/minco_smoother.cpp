@@ -50,6 +50,14 @@ namespace minco_smoother
     plugin_name_ = name;
     logger_ = node->get_logger();
 
+    current_state_VAJ_ << 0.0, 0.0, 0.0;
+    current_state_OAJ_ << 0.0, 0.0, 0.0;
+    // current_odom_sub_ = node->create_subscription<nav_msgs::msg::Odometry>(
+    //   "current_odom", rclcpp::QoS(10),
+    //   [this](const nav_msgs::msg::Odometry::SharedPtr msg) {
+    //     //---process current odom---
+    //   });
+
     //---declare parameters---
     declare_parameter_if_not_declared(node, plugin_name_ + ".max_velocity", rclcpp::ParameterValue(0.9));
     declare_parameter_if_not_declared(node, plugin_name_ + ".max_acc", rclcpp::ParameterValue(0.9));
@@ -219,5 +227,4 @@ namespace minco_smoother
 }; // namespace minco_smoother
 
 #include "pluginlib/class_list_macros.hpp"
-PLUGINLIB_EXPORT_CLASS(
-  minco_smoother::MincoSmoother, nav2_core::Smoother)
+PLUGINLIB_EXPORT_CLASS(minco_smoother::MincoSmoother, nav2_core::Smoother)

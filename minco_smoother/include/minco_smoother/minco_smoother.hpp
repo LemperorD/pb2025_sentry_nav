@@ -22,6 +22,8 @@
 #include <tf2/utils.hpp>
 #include <minco_smoother/minco_utils.hpp>
 
+#include <nav_msgs/msg/odometry.hpp>
+
 namespace minco_smoother
 {
 
@@ -102,6 +104,10 @@ private:
   std::shared_ptr<nav2_costmap_2d::CostmapSubscriber> costmap_sub_;
   rclcpp::Logger logger_{rclcpp::get_logger("MincoSmoother")};
 
+  rclcpp::Subscription<nav_msgs::msg::Odometry> current_odom_sub_;
+  Eigen::Vector3d current_state_OAJ_; //x y theta
+  Eigen::Vector3d current_state_VAJ_; //vx vy omega
+
   std::vector<Eigen::VectorXd> Unoccupied_sample_trajs_; // x y theta dtheta ds
   FlatTrajData flat_traj_;
   minco::Minco minco_solver_;
@@ -115,7 +121,6 @@ private:
   double max_omega_; double max_domega_;
   double sampletime_;
   int mintrajNum_;
-
 
 };
 
