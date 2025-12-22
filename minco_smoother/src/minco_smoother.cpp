@@ -25,7 +25,8 @@ namespace minco_smoother
 using nav2_util::declare_parameter_if_not_declared;
 
 void MincoSmoother::cleanup(){
-
+  costmap_sub_.reset();
+  RCLCPP_INFO(logger_, "Cleaning up Minco Smoother");
 }
 
 void MincoSmoother::activate(){
@@ -215,7 +216,7 @@ FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path
   return flat_traj_;
 }
 
-void MincoSmoother::minco_plan(FlatTrajData & flat_traj){
+bool MincoSmoother::minco_plan(FlatTrajData & flat_traj){
   bool final_collision = false;
   int replan_num_for_coll = 0;
 
@@ -258,6 +259,10 @@ void MincoSmoother::minco_plan(FlatTrajData & flat_traj){
   Collision_point_Pub();
 
   return true;
+}
+
+void MincoSmoother::optimizer(){
+  //---TODO--- 
 }
 
 }; // namespace minco_smoother

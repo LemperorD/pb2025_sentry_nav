@@ -93,9 +93,9 @@ protected:
    */
   FlatTrajData getTrajDataFromPath(const nav_msgs::msg::Path & path);
 
-  void minco_plan(FlatTrajData & flat_traj);
+  bool minco_plan(FlatTrajData & flat_traj);
 
-  void optimizeTraj(FlatTrajData & flat_traj);
+  void optimizer();
 
 private:
   rclcpp_lifecycle::LifecycleNode::WeakPtr node_;
