@@ -104,9 +104,8 @@ private:
   std::shared_ptr<nav2_costmap_2d::CostmapSubscriber> costmap_sub_;
   rclcpp::Logger logger_{rclcpp::get_logger("MincoSmoother")};
 
-  rclcpp::Subscription<nav_msgs::msg::Odometry> current_odom_sub_;
-  Eigen::Vector3d current_state_OAJ_; //x y theta
-  Eigen::Vector3d current_state_VAJ_; //vx vy omega
+  Eigen::Vector3d current_state_OAJ_;
+  Eigen::Vector3d current_state_VAJ_;
 
   std::vector<Eigen::VectorXd> Unoccupied_sample_trajs_; // x y theta dtheta ds
   FlatTrajData flat_traj_;
