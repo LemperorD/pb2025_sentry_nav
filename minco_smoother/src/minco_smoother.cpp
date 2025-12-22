@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "minco_smoother/minco_smoother.hpp"
+#include "minco_smoother/lbfgs.hpp"
 
 #include "nav2_core/exceptions.hpp"
 #include "nav2_util/geometry_utils.hpp"
@@ -59,7 +60,6 @@ std::shared_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub){
   declare_parameter_if_not_declared(node, plugin_name_ + ".max_jps_dis", rclcpp::ParameterValue(0.9));
   declare_parameter_if_not_declared(node, plugin_name_ + ".distance_weight", rclcpp::ParameterValue(0.9));
   declare_parameter_if_not_declared(node, plugin_name_ + ".yaw_weight", rclcpp::ParameterValue(0.9));
-  declare_parameter_if_not_declared(node, plugin_name_ + ".traj_cut_length", rclcpp::ParameterValue(0.9));
   declare_parameter_if_not_declared(node, plugin_name_ + ".min_traj_num", rclcpp::ParameterValue(0.9));
   declare_parameter_if_not_declared(node, plugin_name_ + ".sample_time", rclcpp::ParameterValue(0.9));
     
@@ -72,14 +72,12 @@ std::shared_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub){
   node->get_parameter(plugin_name_ + ".max_jps_dis", max_jps_dis_);
   node->get_parameter(plugin_name_ + ".distance_weight", distance_weight_);
   node->get_parameter(plugin_name_ + ".yaw_weight", yaw_weight_);
-  node->get_parameter(plugin_name_ + ".traj_cut_length", trajCutLength_);
   node->get_parameter(plugin_name_ + ".min_traj_num", mintrajNum_);
   node->get_parameter(plugin_name_ + ".sample_time", sampletime_);
 }
 
 bool MincoSmoother::smooth(nav_msgs::msg::Path & path, const rclcpp::Duration & max_time){
   flat_traj_ = getTrajDataFromPath(path);
-
 
 
   return true;
@@ -89,11 +87,11 @@ FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path
   //-------add Yaw and pathlength to each traj point---------
   Unoccupied_sample_trajs_.clear();
   double cur_theta;
+  Eigen::VectorXd state5d; state5d.resize(5);// x y theta dtheta ds
 
-  Eigen::VectorXd state5d; state5d.resize(5);// x y theta dtheta ds 
   state5d << path.poses[0].pose.position.x, path.poses[0].pose.position.y, 0, 0, 0;
   Unoccupied_sample_trajs_.push_back(state5d); 
-    
+
   cur_theta = atan2(path.poses[1].pose.position.y - path.poses[0].pose.position.y, path.poses[1].pose.position.x - path.poses[0].pose.position.x);
   normalizeAngle(0, cur_theta);
   state5d << path.poses[0].pose.position.x, path.poses[0].pose.position.y, cur_theta , cur_theta, 0;
@@ -190,8 +188,8 @@ FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path
   Eigen::MatrixXd endS;
   startS.resize(2,3);
   endS.resize(2,3);  
-  Eigen::Vector2d startP(cut_Unoccupied_sample_trajs_[0][2],0);
-  Eigen::Vector2d finalP(cut_Unoccupied_sample_trajs_[PathNodeNum-1][2],Unoccupied_pathlengths[PathNodeNum-1]);
+  Eigen::Vector2d startP(Unoccupied_sample_trajs_[0][2],0);
+  Eigen::Vector2d finalP(Unoccupied_sample_trajs_[PathNodeNum-1][2],Unoccupied_pathlengths[PathNodeNum-1]);
   startS.col(0) = startP;
   startS.block(0,1,1,2) = current_state_OAJ_.transpose().head(2);
   startS.block(1,1,1,2) = current_state_VAJ_.transpose().head(2);
@@ -212,8 +210,50 @@ FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path
 }
 
 void MincoSmoother::minco_plan(FlatTrajData & flat_traj){
-  //---minco smoother plan---
+  ros::Time minco_start = ros::Time::now();
+  ros::Time current = ros::Time::now();
+  bool final_collision = false;
+  int replan_num_for_coll = 0;
 
+  double start_safe_dis = map_->getDistanceReal(flat_traj.start_state_XYTheta.head(2))*0.85;
+  safeDis = std::min(start_safe_dis, safeDis_);
+  
+  for(; replan_num_for_coll < safeReplanMaxTime; replan_num_for_coll++){
+
+      if(get_state(flat_traj))
+          ROS_INFO("\033[40;36m get_state time:%f \033[0m", (ros::Time::now()-current).toSec());
+      else
+          return false;
+      current = ros::Time::now();
+      if(optimizer())
+          ROS_INFO("\033[41;37m minco optimizer time:%f \033[0m", (ros::Time::now()-current).toSec());
+      else
+          return false;
+
+      Minco.getTrajectory(optimizer_traj_);
+      final_collision = check_final_collision(optimizer_traj_, iniStateXYTheta);
+      if(final_collision){
+          penaltyWt.time_weight *= 0.75;
+          // safeDis *= 1.2;
+      }
+      else{
+          break;
+      }
+  }
+  Collision_point_Pub();
+  penaltyWt.time_weight = penaltyWt.time_weight_backup_for_replan;
+  safeDis = safeDis_;
+  if(replan_num_for_coll == safeReplanMaxTime){
+      ROS_ERROR("\n\n\n final traj Collision!!!!!!!!!!!\n\n\n\n");
+      return false;
+  }
+
+  final_traj_ = optimizer_traj_;
+  final_initStateXYTheta_ = iniStateXYTheta;
+  final_finStateXYTheta_ = finStateXYTheta;
+  Collision_point_Pub();
+
+  return true;
 }
 
 }; // namespace minco_smoother

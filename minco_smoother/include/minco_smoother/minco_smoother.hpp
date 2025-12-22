@@ -115,7 +115,6 @@ private:
   double safe_dis_;
   double max_jps_dis_;
   double distance_weight_; double yaw_weight_;
-  double trajCutLength_;
   double max_vel_; double max_acc_;
   double max_omega_; double max_domega_;
   double sampletime_;
