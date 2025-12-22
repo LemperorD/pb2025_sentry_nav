@@ -109,7 +109,11 @@ private:
 
   std::vector<Eigen::VectorXd> Unoccupied_sample_trajs_; // x y theta dtheta ds
   FlatTrajData flat_traj_;
-  minco::Minco minco_solver_;
+  minco::Minco minco_;
+
+  Eigen::Vector3d start_pose_xytheta_;
+  Eigen::Vector3d end_pose_xytheta_;
+  nav_msgs::msg::Path smoothed_path_; //result path
 
   //---parameters---
   double safe_dis_;

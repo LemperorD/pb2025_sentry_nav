@@ -77,9 +77,15 @@ std::shared_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub){
 }
 
 bool MincoSmoother::smooth(nav_msgs::msg::Path & path, const rclcpp::Duration & max_time){
+  start_pose_xytheta_ << path.poses.front().pose.position.x,
+                         path.poses.front().pose.position.y,
+                         tf2::getYaw(path.poses.front().pose.orientation);
+  end_pose_xytheta_ << path.poses.back().pose.position.x,
+                       path.poses.back().pose.position.y,
+                       tf2::getYaw(path.poses.back().pose.orientation);
+
   flat_traj_ = getTrajDataFromPath(path);
-
-
+  minco_plan(flat_traj_);
   return true;
 }
 
@@ -202,16 +208,14 @@ FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path
   
   flat_traj_.start_state = startS;
   flat_traj_.final_state = endS;
-  flat_traj_.start_state_XYTheta = start_state_;
-  flat_traj_.final_state_XYTheta = end_state_;
+  flat_traj_.start_state_XYTheta = start_pose_xytheta_;
+  flat_traj_.final_state_XYTheta = end_pose_xytheta_;
   flat_traj_.if_cut = false;
     
   return flat_traj_;
 }
 
 void MincoSmoother::minco_plan(FlatTrajData & flat_traj){
-  ros::Time minco_start = ros::Time::now();
-  ros::Time current = ros::Time::now();
   bool final_collision = false;
   int replan_num_for_coll = 0;
 
