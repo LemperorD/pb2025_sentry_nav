@@ -71,7 +71,7 @@ def generate_launch_description():
     declare_world_cmd = DeclareLaunchArgument(
         "world",
         default_value="rmuc_2025",
-        description="Select world: 'rmul_2024' or 'rmuc_2024' or 'rmul_2025' or 'rmuc_2025' (map file share the same name as the this parameter)",
+        description="Select world: 'rmul_2024' or 'rmuc_2024' or 'rmul_2025' or 'rmuc_2025' or 'rmuc_2026' or 'rmul_2026'(map file share the same name as the this parameter)",
     )
 
     declare_map_yaml_cmd = DeclareLaunchArgument(
@@ -157,7 +157,7 @@ def generate_launch_description():
 
     bringup_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(launch_dir, "bringup_launch.py")),
-        # PythonLaunchDescriptionSource(os.path.join(launch_dir, "bringup_launch_test.py")),
+        #PythonLaunchDescriptionSource(os.path.join(launch_dir, "bringup_launch_test.py")),
         launch_arguments={
             "namespace": namespace,
             "slam": slam,
