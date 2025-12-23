@@ -158,12 +158,10 @@ private:
   Eigen::MatrixXd finalInnerpoints;
   Eigen::VectorXd finalpieceTime;
 
-  minco::MINCO_S3NU Minco;
   std::vector<Eigen::Vector3d> statelist;
 
   PathLbfgsParams path_lbfgs_params_;
   PathpenaltyWeights PathpenaltyWt;
-
 
   // sampling parameters
   int sparseResolution_;
@@ -212,7 +210,6 @@ private:
   // Trajectory prediction resolution for get_the_predicted_state
   double trajPredictResolution_;
 
-  bool if_visual_optimization_ = false;
 };
 
 } // namespace minco_smoother
