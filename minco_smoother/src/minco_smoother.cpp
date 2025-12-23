@@ -157,7 +157,7 @@ FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path
     Unoccupied_Weightpathlengths.push_back(Unoccupied_AllWeightingPathLength_);
   }
 
-  double totalTrajTime_ = evaluateDuration(Unoccupied_AllWeightingPathLength_, current_state_VAJ_.x(),0.0,max_vel_,max_acc_);
+  double totalTrajTime_ = evaluateDuration(Unoccupied_AllWeightingPathLength_, current_state_VAJ_.x(), 0.0, max_vel_, max_acc_);
   std::vector<Eigen::Vector3d> Unoccupied_traj_pts; // Store the sampled coordinates yaw, s, t
   std::vector<Eigen::Vector3d> Unoccupied_positions; // Store the sampled coordinates x, y, yaw
 
@@ -170,12 +170,13 @@ FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path
   double tmparc = 0;
 
   for(double samplet = Unoccupied_sampletime; samplet<Unoccupied_totalTrajTime_-1e-3; samplet+=Unoccupied_sampletime){
-    double arc = evaluateLength(samplet, Unoccupied_AllWeightingPathLength_, Unoccupied_totalTrajTime_, current_state_VAJ_.x(), 0.0, max_vel_, max_acc_);
+    double arc = evaluateLength(samplet, Unoccupied_AllWeightingPathLength_,
+                                Unoccupied_totalTrajTime_, current_state_VAJ_.x(), 0.0, max_vel_, max_acc_);
     for (int k = Unoccupied_PathNodeIndex; k<PathNodeNum; k++){
       Eigen::VectorXd pathnode = Unoccupied_sample_trajs_[k];
       Eigen::VectorXd prepathnode = Unoccupied_sample_trajs_[k-1];
       tmparc = Unoccupied_Weightpathlengths[k];
-      if(tmparc >= arc){
+      if(tmparc >= arc){  
         Unoccupied_PathNodeIndex = k; 
         double l1 = tmparc-arc;
         double l = Unoccupied_Weightpathlengths[k]-Unoccupied_Weightpathlengths[k-1];
@@ -224,33 +225,32 @@ bool MincoSmoother::minco_plan(FlatTrajData & flat_traj){
   safeDis = std::min(start_safe_dis, safeDis_);
   
   for(; replan_num_for_coll < safeReplanMaxTime; replan_num_for_coll++){
+    if(get_state(flat_traj))
+        ROS_INFO("\033[40;36m get_state time:%f \033[0m", (ros::Time::now()-current).toSec());
+    else
+        return false;
+    current = ros::Time::now();
+    if(optimizer())
+        ROS_INFO("\033[41;37m minco optimizer time:%f \033[0m", (ros::Time::now()-current).toSec());
+    else
+        return false;
 
-      if(get_state(flat_traj))
-          ROS_INFO("\033[40;36m get_state time:%f \033[0m", (ros::Time::now()-current).toSec());
-      else
-          return false;
-      current = ros::Time::now();
-      if(optimizer())
-          ROS_INFO("\033[41;37m minco optimizer time:%f \033[0m", (ros::Time::now()-current).toSec());
-      else
-          return false;
-
-      Minco.getTrajectory(optimizer_traj_);
-      final_collision = check_final_collision(optimizer_traj_, iniStateXYTheta);
-      if(final_collision){
-          penaltyWt.time_weight *= 0.75;
-          // safeDis *= 1.2;
-      }
-      else{
-          break;
-      }
+    Minco.getTrajectory(optimizer_traj_);
+    final_collision = check_final_collision(optimizer_traj_, iniStateXYTheta);
+    if(final_collision){
+        penaltyWt.time_weight *= 0.75;
+        // safeDis *= 1.2;
+    }
+    else{
+        break;
+    }
   }
   Collision_point_Pub();
   penaltyWt.time_weight = penaltyWt.time_weight_backup_for_replan;
   safeDis = safeDis_;
   if(replan_num_for_coll == safeReplanMaxTime){
-      ROS_ERROR("\n\n\n final traj Collision!!!!!!!!!!!\n\n\n\n");
-      return false;
+    ROS_ERROR("\n\n\n final traj Collision!!!!!!!!!!!\n\n\n\n");
+    return false;
   }
 
   final_traj_ = optimizer_traj_;
@@ -261,7 +261,34 @@ bool MincoSmoother::minco_plan(FlatTrajData & flat_traj){
   return true;
 }
 
-void MincoSmoother::optimizer(){
+bool MincoSmoother::get_state(const FlatTrajData &flat_traj){
+    ifCutTraj_ = flat_traj.if_cut;
+
+    TrajNum = flat_traj.UnOccupied_traj_pts.size()+1;
+
+    Innerpoints.resize(2,TrajNum-1);
+    for(u_int i=0; i<flat_traj.UnOccupied_traj_pts.size(); i++){
+        Innerpoints.col(i) = flat_traj.UnOccupied_traj_pts[i].head(2);
+    }
+
+    inner_init_positions = flat_traj.UnOccupied_positions;
+    inner_init_positions.push_back(flat_traj.final_state_XYTheta);
+
+    iniState = flat_traj.start_state;
+    finState = flat_traj.final_state;
+
+    pieceTime.resize(TrajNum); pieceTime.setOnes();
+    pieceTime *= flat_traj.UnOccupied_initT;
+
+    iniStateXYTheta = flat_traj.start_state_XYTheta;
+    finStateXYTheta = flat_traj.final_state_XYTheta;
+
+    pub_inner_init_positions(inner_init_positions);
+    
+    return true;
+}
+
+bool MincoSmoother::optimizer(){
   //---TODO--- 
 }
 

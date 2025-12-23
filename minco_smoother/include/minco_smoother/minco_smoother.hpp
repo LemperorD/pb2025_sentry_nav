@@ -95,7 +95,9 @@ protected:
 
   bool minco_plan(FlatTrajData & flat_traj);
 
-  void optimizer();
+  bool get_state(const FlatTrajData & flat_traj);
+
+  bool optimizer();
 
 private:
   rclcpp_lifecycle::LifecycleNode::WeakPtr node_;
@@ -124,6 +126,93 @@ private:
   double sampletime_;
   int mintrajNum_;
 
+    // optimizer parameters
+  double mean_time_lowBound_;
+  double mean_time_uppBound_;
+  double smoothEps;// for smoothL1
+  PenaltyWeights penaltyWt;
+  Eigen::Vector2d energyWeights;
+  lbfgs::lbfgs_parameter_t lbfgs_params_;
+  
+  double finalMinSafeDis;
+  int finalSafeDisCheckNum;
+  int safeReplanMaxTime;
+
+  Eigen::Vector3d iniStateXYTheta;
+  Eigen::Vector3d finStateXYTheta;
+
+  Eigen::Vector3d final_initStateXYTheta_;
+  Eigen::Vector3d final_finStateXYTheta_;
+
+  Eigen::VectorXd pieceTime;
+  Eigen::MatrixXd Innerpoints;
+  Eigen::MatrixXd iniState;
+  Eigen::MatrixXd finState;
+  // trajectory segments number
+  int TrajNum;
+  // if the traj is cutted
+  bool ifCutTraj_;
+
+  std::vector<Eigen::Vector3d> inner_init_positions;
+
+  Eigen::MatrixXd finalInnerpoints;
+  Eigen::VectorXd finalpieceTime;
+
+  minco::MINCO_S3NU Minco;
+  std::vector<Eigen::Vector3d> statelist;
+
+  PathLbfgsParams path_lbfgs_params_;
+  PathpenaltyWeights PathpenaltyWt;
+
+
+  // sampling parameters
+  int sparseResolution_;
+  int sparseResolution_6_;
+  double timeResolution_;
+  int mintrajNum_;
+
+  int iter_num_;
+  // store the gradient of the cost function
+  Eigen::Matrix2Xd gradByPoints;
+  Eigen::VectorXd gradByTimes;
+  Eigen::MatrixX2d partialGradByCoeffs;
+  Eigen::VectorXd partialGradByTimes;
+  Eigen::Vector2d gradByTailStateS;
+  Eigen::Vector2d FinalIntegralXYError;
+  // for ALM
+  Eigen::Vector2d FinalIntegralXYError_;
+  // for debug, record the collision points
+  std::vector<Eigen::Vector2d> collision_point;
+  std::vector<Eigen::Vector2d> collision_point_;
+
+  // unchanged auxiliary parameters in the loop
+  int SamNumEachPart;
+  // Simpson integration coefficients for each sampling point
+  Eigen::VectorXd IntegralChainCoeff;
+
+  // checkpoints for collision check
+  std::vector<Eigen::Vector2d> check_point;
+  double safeDis_, safeDis;
+
+  // Whether to perform visualization
+  bool ifprint = false;
+
+  // Augmented Lagrangian
+  Eigen::VectorXd init_EqualLambda_, init_EqualRho_, EqualRhoMax_, EqualGamma_;
+  Eigen::VectorXd EqualLambda, EqualRho;
+  Eigen::VectorXd EqualTolerance_;
+
+  Eigen::VectorXd Cut_init_EqualLambda_, Cut_init_EqualRho_, Cut_EqualRhoMax_, Cut_EqualGamma_;
+  Eigen::VectorXd Cut_EqualLambda, Cut_EqualRho;
+  Eigen::VectorXd Cut_EqualTolerance_;
+
+  bool hrz_limited_;
+  double hrz_laser_range_dgr_;
+
+  // Trajectory prediction resolution for get_the_predicted_state
+  double trajPredictResolution_;
+
+  bool if_visual_optimization_ = false;
 };
 
 } // namespace minco_smoother
