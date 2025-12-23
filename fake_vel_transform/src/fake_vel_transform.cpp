@@ -49,7 +49,8 @@ FakeVelTransform::FakeVelTransform(const rclcpp::NodeOptions & options)
   this->get_parameter("output_cmd_vel_topic", output_cmd_vel_topic_);
   this->get_parameter("chassis_state_topic", chassis_state_topic_);
   this->get_parameter("init_spin_speed", spin_speed_);
-
+  tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
   cmd_vel_chassis_pub_ =
@@ -85,7 +86,7 @@ FakeVelTransform::FakeVelTransform(const rclcpp::NodeOptions & options)
 
 void FakeVelTransform::chassisStateCallback(const example_interfaces::msg::UInt8::SharedPtr msg)
 {
-  chassis_state_ = msg->data;
+    chassis_mode_ = msg->data;
 }
 
 void FakeVelTransform::cmdSpinCallback(const example_interfaces::msg::Float32::SharedPtr msg)
@@ -135,9 +136,21 @@ void FakeVelTransform::syncCallback(
     }
     current_cmd_vel = latest_cmd_vel_;
   }
-
+  
+  tf_chassis_to_gimbal_yaw_=tf_buffer_->lookupTransform("chassis","gimbal_yaw",tf2::TimePointZero);
   current_robot_base_angle_ = tf2::getYaw(odom_msg->pose.pose.orientation);
-  float yaw_diff = current_robot_base_angle_;
+  const auto & q = tf_chassis_to_gimbal_yaw_.transform.rotation;
+  tf2::Quaternion quat(q.x, q.y, q.z, q.w);
+  double roll, pitch, yaw;
+  tf2::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+  chassis_followed_yaw_=yaw;
+  float yaw_diff=0.0;
+  if(chassis_mode_ == chassisFollowed){
+    // When in chassis-followed mode, use the chassis yaw to transform velocity
+     yaw_diff= chassis_followed_yaw_;
+  }
+  else
+  yaw_diff = current_robot_base_angle_;
   geometry_msgs::msg::Twist aft_tf_vel = transformVelocity(current_cmd_vel, yaw_diff);
   cmd_vel_chassis_pub_->publish(aft_tf_vel);
 }
@@ -148,22 +161,46 @@ void FakeVelTransform::publishTransform()
   t.header.stamp = this->get_clock()->now();
   t.header.frame_id = robot_base_frame_;
   t.child_frame_id = fake_robot_base_frame_;
+
+  double tf_yaw = 0.0;
+
+  {
+    std::lock_guard<std::mutex> lock(tf_mutex_);
+
+    if (chassis_mode_ == littleTES) {
+      // Small gyro mode:
+      // Fake base cancels real robot yaw so Nav2 sees a stable frame
+      tf_yaw = -current_robot_base_angle_;
+    } else {
+      // Chassis-followed / go-home:
+      // Fake base aligned with real base
+      tf_yaw = -chassis_followed_yaw_;
+    }
+  }
+
   tf2::Quaternion q;
-  q.setRPY(0, 0, -current_robot_base_angle_);
+  q.setRPY(0.0, 0.0, tf_yaw);
   t.transform.rotation = tf2::toMsg(q);
   tf_broadcaster_->sendTransform(t);
 }
 
-geometry_msgs::msg::Twist FakeVelTransform::transformVelocity(
-  const geometry_msgs::msg::Twist::SharedPtr & twist, float yaw_diff)
-{
-  geometry_msgs::msg::Twist aft_tf_vel;
-  aft_tf_vel.angular.z = twist->angular.z + spin_speed_;
-  aft_tf_vel.linear.x = twist->linear.x * cos(yaw_diff) + twist->linear.y * sin(yaw_diff);
-  aft_tf_vel.linear.y = -twist->linear.x * sin(yaw_diff) + twist->linear.y * cos(yaw_diff);
-  return aft_tf_vel;
-}
 
+geometry_msgs::msg::Twist FakeVelTransform::transformVelocity( const geometry_msgs::msg::Twist::SharedPtr & twist, float yaw_diff) { 
+  geometry_msgs::msg::Twist out; 
+  if(chassis_mode_ == chassisFollowed){ 
+  // Nav2 outputs velocity in fake_base -> rotate to chassis 
+  out.linear.x = twist->linear.x * cos(yaw_diff) + twist->linear.y * sin(yaw_diff); 
+  out.linear.y = -twist->linear.x * sin(yaw_diff) + twist->linear.y * cos(yaw_diff); 
+  out.angular.z = twist->angular.z;
+    } 
+  else{ // Fake base already stabilized by TF, no rotation here 
+    out.linear.x = twist->linear.x; 
+    out.linear.y = twist->linear.y; 
+    out.angular.z = spin_speed_; 
+    // ONLY here add spin 
+    } 
+    return out; 
+}
 }  // namespace fake_vel_transform
 
 #include "rclcpp_components/register_node_macro.hpp"

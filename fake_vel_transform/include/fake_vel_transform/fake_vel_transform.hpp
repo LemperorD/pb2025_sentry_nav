@@ -29,13 +29,17 @@
 #include "nav_msgs/msg/path.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "tf2_ros/transform_broadcaster.h"
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+
 
 typedef enum
 {
   chassisFollowed = 1,
   littleTES,
   goHome,
-} chassisState;
+} ChassisMode;
 
 namespace fake_vel_transform
 {
@@ -72,7 +76,8 @@ private:
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
   rclcpp::TimerBase::SharedPtr timer_;
-
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   std::string robot_base_frame_;
   std::string fake_robot_base_frame_;
   std::string chassis_frame_;
@@ -83,11 +88,13 @@ private:
   std::string output_cmd_vel_topic_;
   std::string chassis_state_topic_;
   float spin_speed_;
-  uint8_t chassis_state_;
+  uint8_t chassis_mode_=2;
+  double chassis_followed_yaw_=0.0;
 
   std::mutex cmd_vel_mutex_;
   std::mutex tf_mutex_;
   geometry_msgs::msg::Twist::SharedPtr latest_cmd_vel_;
+  geometry_msgs::msg::TransformStamped tf_chassis_to_gimbal_yaw_;
   double current_robot_base_angle_;
   rclcpp::Time last_controller_activate_time_;
 };
