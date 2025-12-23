@@ -139,7 +139,6 @@ void FakeVelTransform::syncCallback(
   current_robot_base_angle_ = tf2::getYaw(odom_msg->pose.pose.orientation);
   float yaw_diff = current_robot_base_angle_;
   geometry_msgs::msg::Twist aft_tf_vel = transformVelocity(current_cmd_vel, yaw_diff);
-
   cmd_vel_chassis_pub_->publish(aft_tf_vel);
 }
 
