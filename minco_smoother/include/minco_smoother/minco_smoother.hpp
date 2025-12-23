@@ -129,39 +129,39 @@ private:
     // optimizer parameters
   double mean_time_lowBound_;
   double mean_time_uppBound_;
-  double smoothEps;// for smoothL1
-  PenaltyWeights penaltyWt;
-  Eigen::Vector2d energyWeights;
+  double smoothEps_;// for smoothL1
+  PenaltyWeights penaltyWt_;
+  Eigen::Vector2d energyWeights_;
   lbfgs::lbfgs_parameter_t lbfgs_params_;
   
-  double finalMinSafeDis;
-  int finalSafeDisCheckNum;
-  int safeReplanMaxTime;
+  double finalMinSafeDis_;
+  int finalSafeDisCheckNum_;
+  int safeReplanMaxTime_;
 
-  Eigen::Vector3d iniStateXYTheta;
-  Eigen::Vector3d finStateXYTheta;
+  Eigen::Vector3d iniStateXYTheta_;
+  Eigen::Vector3d finStateXYTheta_;
 
   Eigen::Vector3d final_initStateXYTheta_;
   Eigen::Vector3d final_finStateXYTheta_;
 
-  Eigen::VectorXd pieceTime;
-  Eigen::MatrixXd Innerpoints;
-  Eigen::MatrixXd iniState;
-  Eigen::MatrixXd finState;
+  Eigen::VectorXd pieceTime_;
+  Eigen::MatrixXd Innerpoints_;
+  Eigen::MatrixXd iniState_;
+  Eigen::MatrixXd finState_;
   // trajectory segments number
-  int TrajNum;
+  int TrajNum_;
   // if the traj is cutted
   bool ifCutTraj_;
 
-  std::vector<Eigen::Vector3d> inner_init_positions;
+  std::vector<Eigen::Vector3d> inner_init_positions_;
 
-  Eigen::MatrixXd finalInnerpoints;
-  Eigen::VectorXd finalpieceTime;
+  Eigen::MatrixXd finalInnerpoints_;
+  Eigen::VectorXd finalpieceTime_;
 
-  std::vector<Eigen::Vector3d> statelist;
+  std::vector<Eigen::Vector3d> statelist_;
 
   PathLbfgsParams path_lbfgs_params_;
-  PathpenaltyWeights PathpenaltyWt;
+  PathpenaltyWeights PathpenaltyWt_;
 
   // sampling parameters
   int sparseResolution_;
@@ -171,12 +171,12 @@ private:
 
   int iter_num_;
   // store the gradient of the cost function
-  Eigen::Matrix2Xd gradByPoints;
-  Eigen::VectorXd gradByTimes;
-  Eigen::MatrixX2d partialGradByCoeffs;
-  Eigen::VectorXd partialGradByTimes;
-  Eigen::Vector2d gradByTailStateS;
-  Eigen::Vector2d FinalIntegralXYError;
+  Eigen::Matrix2Xd gradByPoints_;
+  Eigen::VectorXd gradByTimes_;
+  Eigen::MatrixX2d partialGradByCoeffs_;
+  Eigen::VectorXd partialGradByTimes_;
+  Eigen::Vector2d gradByTailStateS_;
+  Eigen::Vector2d FinalIntegralXYError_;
   // for ALM
   Eigen::Vector2d FinalIntegralXYError_;
   // for debug, record the collision points

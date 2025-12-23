@@ -139,6 +139,25 @@ inline void VirtualT2RealT(const EIGENVEC &VT, Eigen::VectorXd &RT){
     }
 }
 
+inline void positiveSmoothedL1(const double smoothEps, const double &x, double &f, double &df){
+  const double pe = smoothEps;
+  const double half = 0.5 * pe;
+  const double f3c = 1.0 / (pe * pe);
+  const double f4c = -0.5 * f3c / pe;
+  const double d2c = 3.0 * f3c;
+  const double d3c = 4.0 * f4c;
+
+  if (x < pe){
+    f = (f4c * x + f3c) * x * x * x;
+    df = (d3c * x + d2c) * x * x;
+  }
+  else{
+    f = x - half;
+    df = 1.0;
+  }
+  return;
+}
+
 }
 
 #endif // NAV2_SMOOTHER__MINCO_SMOOTHER_UTIL_HPP_

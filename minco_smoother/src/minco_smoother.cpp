@@ -245,7 +245,7 @@ bool MincoSmoother::minco_plan(FlatTrajData & flat_traj){
     }
   }
   Collision_point_Pub();
-  penaltyWt.time_weight = penaltyWt.time_weight_backup_for_replan;
+  penaltyWt_.time_weight = penaltyWt.time_weight_backup_for_replan;
   safeDis = safeDis_;
   if(replan_num_for_coll == safeReplanMaxTime){
     ROS_ERROR("\n\n\n final traj Collision!!!!!!!!!!!\n\n\n\n");
@@ -253,8 +253,8 @@ bool MincoSmoother::minco_plan(FlatTrajData & flat_traj){
   }
 
   final_traj_ = optimizer_traj_;
-  final_initStateXYTheta_ = iniStateXYTheta;
-  final_finStateXYTheta_ = finStateXYTheta;
+  final_initStateXYTheta_ = iniStateXYTheta_;
+  final_finStateXYTheta_ = finStateXYTheta_;
   Collision_point_Pub();
 
   return true;
@@ -288,29 +288,29 @@ bool MincoSmoother::optimizer(){
   EqualRho = init_EqualRho_; 
 
   // 2*(N-1) intermediate points, 1 relaxed S, N times
-  int variable_num_ = 3 * TrajNum - 1;
-  // ROS_INFO_STREAM("iniStates: \n" << iniState);
-  // ROS_INFO_STREAM("finStates: \n" << finState);
-  // ROS_INFO("TrajNum: %d", TrajNum);
-  minco_.setConditions(iniState, finState, TrajNum, energyWeights);
+  int variable_num_ = 3 * TrajNum_ - 1;
+  // ROS_INFO_STREAM("iniStates: \n" << iniState_);
+  // ROS_INFO_STREAM("finStates: \n" << finState_);
+  // ROS_INFO("TrajNum: %d", TrajNum_);
+  minco_.setConditions(iniState_, finState_, TrajNum_, energyWeights_);
 
-  // ROS_INFO_STREAM("init Innerpoints: \n" << Innerpoints);
-  // ROS_INFO_STREAM("init pieceTime: " << pieceTime.transpose());
+  // ROS_INFO_STREAM("init Innerpoints: \n" << Innerpoints_);
+  // ROS_INFO_STREAM("init pieceTime: " << pieceTime_.transpose());
 
-  minco_.setParameters(Innerpoints, pieceTime);   
+  minco_.setParameters(Innerpoints_, pieceTime_);   
   minco_.getTrajectory(init_final_traj_);
-  mincoPathPub(init_final_traj_, iniStateXYTheta, mincoinitPath); 
-  mincoPointPub(init_final_traj_, iniStateXYTheta, mincoinitPoint, Eigen::Vector3d(173, 127, 168));
+  mincoPathPub(init_final_traj_, iniStateXYTheta_, mincoinitPath); 
+  mincoPointPub(init_final_traj_, iniStateXYTheta_, mincoinitPoint, Eigen::Vector3d(173, 127, 168));
   Eigen::VectorXd x;
   x.resize(variable_num_);
   int offset = 0;
-  memcpy(x.data()+offset,Innerpoints.data(), Innerpoints.size() * sizeof(x[0]));
-  offset += Innerpoints.size();
-  x[offset] = finState(1,0);
+  memcpy(x.data()+offset,Innerpoints_.data(), Innerpoints_.size() * sizeof(x[0]));
+  offset += Innerpoints_.size();
+  x[offset] = finState_(1,0);
   ++offset;
-  Eigen::Map<Eigen::VectorXd> Vt(x.data()+offset, pieceTime.size());
-  offset += pieceTime.size();
-  RealT2VirtualT(pieceTime,Vt);
+  Eigen::Map<Eigen::VectorXd> Vt(x.data()+offset, pieceTime_.size());
+  offset += pieceTime_.size();
+  RealT2VirtualT(pieceTime_,Vt);
 
   double cost;
   int result;
@@ -320,7 +320,7 @@ bool MincoSmoother::optimizer(){
 
   auto start = std::chrono::high_resolution_clock::now();
   // Handle cases where the path is too short to converge
-  if (fabs(finState(1, 0)) < path_lbfgs_params_.shot_path_horizon) {
+  if (fabs(finState_(1, 0)) < path_lbfgs_params_.shot_path_horizon) {
       path_lbfgs_params_.path_lbfgs_params.past = path_lbfgs_params_.shot_path_past;
   } else {
       path_lbfgs_params_.path_lbfgs_params.past = path_lbfgs_params_.normal_past;
@@ -329,7 +329,7 @@ bool MincoSmoother::optimizer(){
   ifprint = false;
   result = lbfgs::lbfgs_optimize(x,
                               cost,
-                              MSPlanner::costFunctionCallbackPath,
+                              MincoSmoother::costFunctionCallbackPath,
                               NULL,
                               NULL,
                               this,
@@ -365,19 +365,19 @@ bool MincoSmoother::optimizer(){
   recordTextPub.publish(marker);
 
   ifprint = true;
-  costFunctionCallbackPath(this,x,g);
+  MincoSmoother::costFunctionCallbackPath(this,x,g);
   ifprint = false;
 
   ROS_INFO_STREAM("Pre-processing optimizer:" << duration / 1000.0 << " ms");
   ROS_INFO("Pre-processing finish! result:%d   finalcost:%f   iter_num_:%d", result, cost, iter_num_);
   offset = 0;
-  Eigen::Map<Eigen::MatrixXd> PathP(x.data() + offset, 2, TrajNum - 1);
+  Eigen::Map<Eigen::MatrixXd> PathP(x.data() + offset, 2, TrajNum_ - 1);
   offset += 2 * (TrajNum - 1);
   finalInnerpoints = PathP;
   finState(1, 0) = x[offset];
   ++offset;
 
-  Eigen::Map<const Eigen::VectorXd> Patht(x.data() + offset, TrajNum);
+  Eigen::Map<const Eigen::VectorXd> Patht(x.data() + offset, TrajNum_);
   offset += TrajNum;
   VirtualT2RealT(Patht, finalpieceTime);
   minco_.setTConditions(finState);
