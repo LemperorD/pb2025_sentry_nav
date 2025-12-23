@@ -49,13 +49,13 @@ struct PathLbfgsParams{
     double shot_path_horizon;
 };
 
-void normalizeAngle(double from, double & to){
+inline void normalizeAngle(double from, double & to){
   while (to - from > M_PI) to -= 2.0 * M_PI;
   while (to - from < -M_PI) to += 2.0 * M_PI;
 }
 
 // Use trapezoidal velocity profile to get the total time of the path
-double evaluateDuration(const double &length, const double &startV, const double &endV, const double &maxV, const double &maxA){
+inline double evaluateDuration(const double &length, const double &startV, const double &endV, const double &maxV, const double &maxA){
   double critical_len; 
   double startv2 = pow(startV,2);
   double endv2 = pow(endV,2);
@@ -79,7 +79,7 @@ double evaluateDuration(const double &length, const double &startV, const double
 }
 
 // Use trapezoidal velocity profile to get the distance at the curt timestamp
-double evaluateLength(const double &curt, const double &locallength, const double &localtime, const double &startV, const double &endV, const double &maxV, const double &maxA){
+inline double evaluateLength(const double &curt, const double &locallength, const double &localtime, const double &startV, const double &endV, const double &maxV, const double &maxA){
   // std::cout<<"curt: "<<curt<<"  locallength: "<<locallength<<"  localtime: "<<localtime<<"  startV: "<<startV<<"  endV: "<<endV<<"  maxV: "<<maxV<<"  maxA: "<<maxA<<std::endl;
   double critical_len; 
   double startv2 = pow(startV,2);
@@ -117,6 +117,26 @@ double evaluateLength(const double &curt, const double &locallength, const doubl
       return startV*tmpt+0.5*maxA*pow(tmpt,2) + tmpv*(curt-tmpt)-0.5*maxA*pow(curt-tmpt,2);
     }
   }
+}
+
+template <typename EIGENVEC>
+inline void RealT2VirtualT(const Eigen::VectorXd &RT, EIGENVEC &VT){
+    const int sizeT = RT.size();
+    VT.resize(sizeT);
+    for (int i = 0; i < sizeT; ++i){
+        VT(i) = RT(i) > 1.0 ? (sqrt(2.0 * RT(i) - 1.0) - 1.0)
+                            : (1.0 - sqrt(2.0 / RT(i) - 1.0));
+    }
+}
+
+template <typename EIGENVEC>
+inline void VirtualT2RealT(const EIGENVEC &VT, Eigen::VectorXd &RT){
+    const int sizeTau = VT.size();
+    RT.resize(sizeTau);
+    for (int i = 0; i < sizeTau; ++i){
+      RT(i) = VT(i) > 0.0 ? ((0.5 * VT(i) + 1.0) * VT(i) + 1.0)
+                          : 1.0 / ((0.5 * VT(i) - 1.0) * VT(i) + 1.0);
+    }
 }
 
 }
