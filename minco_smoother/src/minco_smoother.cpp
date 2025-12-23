@@ -211,8 +211,7 @@ FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path
   flat_traj_.start_state = startS;
   flat_traj_.final_state = endS;
   flat_traj_.start_state_XYTheta = start_pose_xytheta_;
-  flat_traj_.final_state_XYTheta = end_pose_xytheta_;
-  flat_traj_.if_cut = false;
+  flat_traj_.final_state_XYTheta = end_pose_xytheta_;;
     
   return flat_traj_;
 }
@@ -226,12 +225,12 @@ bool MincoSmoother::minco_plan(FlatTrajData & flat_traj){
   
   for(; replan_num_for_coll < safeReplanMaxTime; replan_num_for_coll++){
     if(get_state(flat_traj))
-        ROS_INFO("\033[40;36m get_state time:%f \033[0m", (ros::Time::now()-current).toSec());
+        RCLCPP_INFO(logger_, "\033[40;36m get_state time:%f \033[0m", (ros::Time::now()-current).toSec());
     else
         return false;
     current = ros::Time::now();
     if(optimizer())
-        ROS_INFO("\033[41;37m minco optimizer time:%f \033[0m", (ros::Time::now()-current).toSec());
+        RCLCPP_INFO(logger_, "\033[41;37m minco optimizer time:%f \033[0m", (ros::Time::now()-current).toSec());
     else
         return false;
 
@@ -262,34 +261,241 @@ bool MincoSmoother::minco_plan(FlatTrajData & flat_traj){
 }
 
 bool MincoSmoother::get_state(const FlatTrajData &flat_traj){
-    ifCutTraj_ = flat_traj.if_cut;
+  TrajNum = flat_traj.UnOccupied_traj_pts.size()+1;
 
-    TrajNum = flat_traj.UnOccupied_traj_pts.size()+1;
+  Innerpoints.resize(2,TrajNum-1);
+  for(u_int i=0; i<flat_traj.UnOccupied_traj_pts.size(); i++){
+      Innerpoints.col(i) = flat_traj.UnOccupied_traj_pts[i].head(2);
+  }
 
-    Innerpoints.resize(2,TrajNum-1);
-    for(u_int i=0; i<flat_traj.UnOccupied_traj_pts.size(); i++){
-        Innerpoints.col(i) = flat_traj.UnOccupied_traj_pts[i].head(2);
-    }
+  inner_init_positions = flat_traj.UnOccupied_positions;
+  inner_init_positions.push_back(flat_traj.final_state_XYTheta);
 
-    inner_init_positions = flat_traj.UnOccupied_positions;
-    inner_init_positions.push_back(flat_traj.final_state_XYTheta);
+  iniState = flat_traj.start_state;
+  finState = flat_traj.final_state;
 
-    iniState = flat_traj.start_state;
-    finState = flat_traj.final_state;
+  pieceTime.resize(TrajNum); pieceTime.setOnes();
+  pieceTime *= flat_traj.UnOccupied_initT;
 
-    pieceTime.resize(TrajNum); pieceTime.setOnes();
-    pieceTime *= flat_traj.UnOccupied_initT;
-
-    iniStateXYTheta = flat_traj.start_state_XYTheta;
-    finStateXYTheta = flat_traj.final_state_XYTheta;
-
-    pub_inner_init_positions(inner_init_positions);
-    
-    return true;
+  iniStateXYTheta = flat_traj.start_state_XYTheta;
+  finStateXYTheta = flat_traj.final_state_XYTheta;
+  
+  return true;
 }
 
 bool MincoSmoother::optimizer(){
-  //---TODO--- 
+  EqualLambda = init_EqualLambda_;
+  EqualRho = init_EqualRho_; 
+
+  // 2*(N-1) intermediate points, 1 relaxed S, N times
+  int variable_num_ = 3 * TrajNum - 1;
+  // ROS_INFO_STREAM("iniStates: \n" << iniState);
+  // ROS_INFO_STREAM("finStates: \n" << finState);
+  // ROS_INFO("TrajNum: %d", TrajNum);
+  Minco.setConditions(iniState, finState, TrajNum, energyWeights);
+
+  // ROS_INFO_STREAM("init Innerpoints: \n" << Innerpoints);
+  // ROS_INFO_STREAM("init pieceTime: " << pieceTime.transpose());
+
+  Minco.setParameters(Innerpoints, pieceTime);   
+  Minco.getTrajectory(init_final_traj_);
+  mincoPathPub(init_final_traj_, iniStateXYTheta, mincoinitPath); 
+  mincoPointPub(init_final_traj_, iniStateXYTheta, mincoinitPoint, Eigen::Vector3d(173, 127, 168));
+  Eigen::VectorXd x;
+  x.resize(variable_num_);
+  int offset = 0;
+  memcpy(x.data()+offset,Innerpoints.data(), Innerpoints.size() * sizeof(x[0]));
+  offset += Innerpoints.size();
+  x[offset] = finState(1,0);
+  ++offset;
+  Eigen::Map<Eigen::VectorXd> Vt(x.data()+offset, pieceTime.size());
+  offset += pieceTime.size();
+  RealT2VirtualT(pieceTime,Vt);
+
+  double cost;
+  int result;
+  Eigen::VectorXd g;
+  g.resize(x.size());
+  iter_num_ = 0;
+
+  auto start = std::chrono::high_resolution_clock::now();
+  // Handle cases where the path is too short to converge
+  if (fabs(finState(1, 0)) < path_lbfgs_params_.shot_path_horizon) {
+      path_lbfgs_params_.path_lbfgs_params.past = path_lbfgs_params_.shot_path_past;
+  } else {
+      path_lbfgs_params_.path_lbfgs_params.past = path_lbfgs_params_.normal_past;
+  }
+
+  ifprint = false;
+  result = lbfgs::lbfgs_optimize(x,
+                              cost,
+                              MSPlanner::costFunctionCallbackPath,
+                              NULL,
+                              NULL,
+                              this,
+                              path_lbfgs_params_.path_lbfgs_params);
+
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+  // Output computation time
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = "world";
+  marker.header.stamp = ros::Time::now();
+  marker.ns = "pre_process";
+  marker.id = 0;
+  marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+  marker.action = visualization_msgs::Marker::ADD;
+  marker.pose.position.x = 11.5;
+  marker.pose.position.y = 7;
+  marker.pose.position.z = 0;
+  marker.pose.orientation.x = 0.0;
+  marker.pose.orientation.y = 0.0;
+  marker.pose.orientation.z = 0.0;
+  marker.pose.orientation.w = 1.0;
+  marker.scale.z = 0.5;
+  marker.color.a = 1.0;
+  marker.color.r = 0.0;
+  marker.color.g = 0.0;
+  marker.color.b = 0.0;
+  double search_time = duration / 1000.0;
+  std::ostringstream out;
+  out << std::fixed << "Pre-process: \n"<< std::setprecision(2) << search_time<<" ms";
+  marker.text = out.str();
+  recordTextPub.publish(marker);
+
+  ifprint = true;
+  costFunctionCallbackPath(this,x,g);
+  ifprint = false;
+
+  ROS_INFO_STREAM("Pre-processing optimizer:" << duration / 1000.0 << " ms");
+  ROS_INFO("Pre-processing finish! result:%d   finalcost:%f   iter_num_:%d", result, cost, iter_num_);
+  offset = 0;
+  Eigen::Map<Eigen::MatrixXd> PathP(x.data() + offset, 2, TrajNum - 1);
+  offset += 2 * (TrajNum - 1);
+  finalInnerpoints = PathP;
+  finState(1, 0) = x[offset];
+  ++offset;
+
+  Eigen::Map<const Eigen::VectorXd> Patht(x.data() + offset, TrajNum);
+  offset += TrajNum;
+  VirtualT2RealT(Patht, finalpieceTime);
+  Minco.setTConditions(finState);
+  Minco.setParameters(finalInnerpoints, finalpieceTime);
+  Minco.getTrajectory(final_traj_);
+  mincoPathPub(final_traj_, iniStateXYTheta, pathmincoinitPath);
+  mincoPointPub(final_traj_, iniStateXYTheta, pathmincoinitPoint, Eigen::Vector3d(114, 159, 207));
+
+  // ROS_INFO_STREAM("Path final pieces time: " << finalpieceTime.transpose());
+  // ROS_INFO_STREAM("Path final Innerpoints: \n" << finalInnerpoints);
+  // ROS_INFO_STREAM("Path final finState: \n" << finState);
+
+  // Formal optimization
+  // ROS_INFO("---------------------------------------------------------------------init---------------------------------------------------------------");
+  // ifprint = true;
+  // costFunctionCallback(this, x, g);
+  // ifprint = false;
+  ROS_INFO("-------------------------------------------------------------------optimize---------------------------------------------------------------");
+  iter_num_ = 0;
+  
+  ros::Time current = ros::Time::now();
+
+  while(ros::ok()){
+      result = lbfgs::lbfgs_optimize(x,
+                                      cost,
+                                      MSPlanner::costFunctionCallback,
+                                      NULL,
+                                      MSPlanner::earlyExit,
+                                      this,
+                                      lbfgs_params_);
+      if (result == lbfgs::LBFGS_CONVERGENCE || result == lbfgs::LBFGS_CANCELED ||
+          result == lbfgs::LBFGS_STOP||result == lbfgs::LBFGSERR_MAXIMUMITERATION){
+          ROS_INFO("optimizer finish! result:%d   finalcost:%f   iter_num_:%d ",result,cost,iter_num_);
+      } 
+      else if (result == lbfgs::LBFGSERR_MAXIMUMLINESEARCH){
+          ROS_WARN("Lbfgs: The line-search routine reaches the maximum number of evaluations.");
+      }
+      else{
+          ROS_WARN("Solver error. Return = %d, %s. Skip this planning.", result, lbfgs::lbfgs_strerror(result));
+      }
+      // ALM update
+      if(!ifCutTraj_){
+
+          // ROS_INFO_STREAM("EqualLambda: " << EqualLambda.transpose() << "  EqualRho: " << EqualRho.transpose() << "  current hx cost:" << FinalIntegralXYError.transpose() << "  XYError.norm():" << FinalIntegralXYError.norm());
+          if(FinalIntegralXYError.norm() < EqualTolerance_[0]){
+              break;
+          }
+          EqualLambda[0] += EqualRho[0] * FinalIntegralXYError.x();
+          EqualLambda[1] += EqualRho[1] * FinalIntegralXYError.y();
+          EqualRho[0] = std::min((1 + EqualGamma_[0]) * EqualRho[0], EqualRhoMax_[0]);
+          EqualRho[1] = std::min((1 + EqualGamma_[1]) * EqualRho[1], EqualRhoMax_[1]);
+      }
+      else{
+          // ROS_INFO_STREAM("EqualLambda: " << EqualLambda.transpose() << "  EqualRho: " << EqualRho.transpose() << "  current hx cost:" << FinalIntegralXYError.transpose() << "  XYError.norm():" << FinalIntegralXYError.norm());
+          if(FinalIntegralXYError.norm() < Cut_EqualTolerance_[0]){
+              break;
+          }
+          EqualLambda[0] += EqualRho[0] * FinalIntegralXYError.x();
+          EqualLambda[1] += EqualRho[1] * FinalIntegralXYError.y();
+          EqualRho[0] = std::min((1 + Cut_EqualGamma_[0]) * EqualRho[0], Cut_EqualRhoMax_[0]);
+          EqualRho[1] = std::min((1 + Cut_EqualGamma_[1]) * EqualRho[1], Cut_EqualRhoMax_[1]);
+
+      }
+
+  }
+
+  double mincotime = (ros::Time::now()-current).toSec();
+  ROS_INFO("\033[40;36m minco optimizer time:%f \033[0m", mincotime);
+  ROS_INFO_STREAM("--------------------------------------------------------------------final------------------------------------------------------");
+
+  marker.header.frame_id = "world";
+  marker.header.stamp = ros::Time::now();
+  marker.ns = "minco";
+  marker.id = 0;
+  marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+  marker.action = visualization_msgs::Marker::ADD;
+  marker.pose.position.x = 11.5;
+  marker.pose.position.y = 6;
+  marker.pose.position.z = 0;
+  marker.pose.orientation.x = 0.0;
+  marker.pose.orientation.y = 0.0;
+  marker.pose.orientation.z = 0.0;
+  marker.pose.orientation.w = 1.0;
+  marker.scale.z = 0.5;
+  marker.color.a = 1.0;
+  marker.color.r = 0.0;
+  marker.color.g = 0.0;
+  marker.color.b = 0.0;
+  search_time = mincotime*1000.0;
+  std::ostringstream out2;
+  out2 << std::fixed <<"Optimization: \n"<< std::setprecision(2) << search_time << " ms";
+  marker.text = out2.str();
+  recordTextPub.publish(marker);
+
+  // Output optimization infomation
+  // ifprint = true;
+  // costFunctionCallback(this,x,g);
+  
+  offset = 0;
+  Eigen::Map<Eigen::MatrixXd> P(x.data()+offset, 2, TrajNum - 1);
+  offset += 2 * (TrajNum - 1);
+  finalInnerpoints = P;
+
+  finState(1,0) = x[offset];
+  ++offset;
+
+  Eigen::Map<const Eigen::VectorXd> t(x.data()+offset, TrajNum);
+  offset += TrajNum;
+  VirtualT2RealT(t,finalpieceTime);
+  Minco.setTConditions(finState);
+  Minco.setParameters(finalInnerpoints, finalpieceTime);
+
+  // std::cout<<"finalInnerpoints: \n"<<finalInnerpoints<<std::endl;
+  // std::cout<<"finalpieceTime: \n"<<finalpieceTime.transpose()<<std::endl;
+
+  ROS_INFO("\n\n optimizer finish! result:%d   finalcost:%f   iter_num_:%d\n\n ",result,cost,iter_num_);
+
+  return true;
 }
 
 }; // namespace minco_smoother
