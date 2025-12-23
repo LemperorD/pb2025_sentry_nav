@@ -158,6 +158,26 @@ inline void positiveSmoothedL1(const double smoothEps, const double &x, double &
   return;
 }
 
+template <typename EIGENVEC>
+inline void backwardGradT(const Eigen::VectorXd &tau,
+                          const Eigen::VectorXd &gradT,
+                          EIGENVEC &gradTau){
+  const int sizetau = tau.size();
+  gradTau.resize(sizetau);
+  double gradrt2vt;
+  for (int i = 0; i < sizetau; i++){
+    if(tau(i)>0){
+      gradrt2vt = tau(i)+1.0;
+    }
+    else{
+      double denSqrt = (0.5*tau(i)-1.0)*tau(i)+1.0;
+      gradrt2vt = (1.0-tau(i))/(denSqrt*denSqrt);
+    }
+    gradTau(i) = gradT(i) * gradrt2vt;
+  }
+  return;
+}
+
 }
 
 #endif // NAV2_SMOOTHER__MINCO_SMOOTHER_UTIL_HPP_
