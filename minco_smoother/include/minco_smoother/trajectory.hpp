@@ -25,7 +25,7 @@
 #ifndef TRAJECTORY_HPP
 #define TRAJECTORY_HPP
 
-#include "gcopter/root_finder.hpp"
+#include "minco_smoother/root_finder.hpp"
 
 #include <Eigen/Eigen>
 

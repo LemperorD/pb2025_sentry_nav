@@ -113,6 +113,13 @@ private:
   FlatTrajData flat_traj_;
   minco::Minco minco_;
 
+  // Results
+  Trajectory<7, 2> final_traj_;
+  // Results before collision check
+  Trajectory<7, 2> optimizer_traj_;
+  // Results before trajectory pre-processing
+  Trajectory<7, 2> init_final_traj_;
+
   Eigen::Vector3d start_pose_xytheta_;
   Eigen::Vector3d end_pose_xytheta_;
   nav_msgs::msg::Path smoothed_path_; //result path
@@ -126,7 +133,7 @@ private:
   double sampletime_;
   int mintrajNum_;
 
-    // optimizer parameters
+  // optimizer parameters
   double mean_time_lowBound_;
   double mean_time_uppBound_;
   double smoothEps_;// for smoothL1
@@ -148,10 +155,9 @@ private:
   Eigen::MatrixXd Innerpoints_;
   Eigen::MatrixXd iniState_;
   Eigen::MatrixXd finState_;
+
   // trajectory segments number
   int TrajNum_;
-  // if the traj is cutted
-  bool ifCutTraj_;
 
   std::vector<Eigen::Vector3d> inner_init_positions_;
 
@@ -176,7 +182,7 @@ private:
   Eigen::MatrixX2d partialGradByCoeffs_;
   Eigen::VectorXd partialGradByTimes_;
   Eigen::Vector2d gradByTailStateS_;
-  Eigen::Vector2d FinalIntegralXYError_;
+  Eigen::Vector2d FinalIntegralXYError;
   // for ALM
   Eigen::Vector2d FinalIntegralXYError_;
   // for debug, record the collision points

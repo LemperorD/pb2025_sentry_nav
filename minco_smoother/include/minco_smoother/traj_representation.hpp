@@ -54,7 +54,6 @@ struct FlatTrajData{
 
   Eigen::Vector3d start_state_XYTheta;
   Eigen::Vector3d final_state_XYTheta;
-  bool if_cut;
 
   void printFlatTrajData() {
     std::cout << "UnOccupied_traj_pts:" << std::endl;
@@ -69,7 +68,6 @@ struct FlatTrajData{
     std::cout << final_state << std::endl;
     std::cout << "start_state_XYTheta: " << start_state_XYTheta.transpose() << std::endl;
     std::cout << "final_state_XYTheta: " << final_state_XYTheta.transpose() << std::endl;
-    std::cout << "if_cut: " << if_cut << std::endl;
   }
 };
 
