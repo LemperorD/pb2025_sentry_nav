@@ -99,6 +99,27 @@ protected:
 
   bool optimizer();
 
+  static inline int earlyExit(void *instance,
+                              const Eigen::VectorXd &x,
+                              const Eigen::VectorXd &g,
+                              const double fx,
+                              const double step,
+                              const int k,
+                              const int ls);
+
+  static double costFunctionCallback(void *ptr,
+                                     const Eigen::VectorXd &x,
+                                     Eigen::VectorXd &g);
+
+  // Gradient for partialGradByCoeffs and partialGradByTimes
+  void attachPenaltyFunctional(double &cost);
+
+  static double costFunctionCallbackPath(void *ptr,
+                                         const Eigen::VectorXd &x,
+                                         Eigen::VectorXd &g);
+
+  void attachPenaltyFunctionalPath(double &cost);
+
 private:
   rclcpp_lifecycle::LifecycleNode::WeakPtr node_;
   std::shared_ptr<tf2_ros::Buffer> tf_;

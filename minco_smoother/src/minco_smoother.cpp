@@ -482,14 +482,14 @@ bool MincoSmoother::optimizer(){
   return true;
 }
 
-inline int MSPlanner::earlyExit(void *instance,
+inline int MincoSmoother::earlyExit(void *instance,
                             const Eigen::VectorXd &x,
                             const Eigen::VectorXd &g,
                             const double fx,
                             const double step,
                             const int k,
                             const int ls){
-    MSPlanner &obj = *(MSPlanner *)instance;
+    MincoSmoother &obj = *(MincoSmoother *)instance;
     obj.FinalIntegralXYError_ = obj.FinalIntegralXYError;
     obj.collision_point_ = obj.collision_point;
     // std::cout<<"cost: "<<fx<<std::endl;
@@ -519,14 +519,14 @@ inline int MSPlanner::earlyExit(void *instance,
     return 0;
 }
 
-double MSPlanner::costFunctionCallback(void *ptr,
+double MincoSmoother::costFunctionCallback(void *ptr,
                                      const Eigen::VectorXd &x,
                                      Eigen::VectorXd &g){
 
     if(x.norm()>1e4)
         return inf;
 
-    MSPlanner &obj = *(MSPlanner *)ptr;
+    MincoSmoother &obj = *(MincoSmoother *)ptr;
     obj.iter_num_ += 1;
 
     g.setZero();
@@ -582,7 +582,7 @@ double MSPlanner::costFunctionCallback(void *ptr,
     return cost;
 }
 
-void MSPlanner::attachPenaltyFunctional(double &cost){
+void MincoSmoother::attachPenaltyFunctional(double &cost){
     collision_point.clear();
     double ini_x = iniStateXYTheta.x();
     double ini_y = iniStateXYTheta.y();
@@ -912,25 +912,25 @@ void MSPlanner::attachPenaltyFunctional(double &cost){
     cost += 0.5 * (EqualRho[0] * pow(FinalIntegralXYError.x() + EqualLambda[0]/EqualRho[0], 2) + EqualRho[1] * pow(FinalIntegralXYError.y() + EqualLambda[1]/EqualRho[1], 2));
     cost_endp += 0.5 * (EqualRho[0] * pow(FinalIntegralXYError.x() + EqualLambda[0]/EqualRho[0], 2) + EqualRho[1] * pow(FinalIntegralXYError.y() + EqualLambda[1]/EqualRho[1], 2));
     if(ifprint){
-        ROS_INFO("\033[40;33m iter finStateXY:%f  %f  \033[0m", VecTrajFinalXY.back().x(), VecTrajFinalXY.back().y());
-        ROS_INFO("\033[40;33m real finStateXY:%f  %f  \033[0m", finStateXYTheta.x(), finStateXYTheta.y());
-        ROS_INFO("error: %f", FinalIntegralXYError.norm());
+        RCLCPP_INFO(logger_, "\033[40;33m iter finStateXY:%f  %f  \033[0m", VecTrajFinalXY.back().x(), VecTrajFinalXY.back().y());
+        RCLCPP_INFO(logger_, "\033[40;33m real finStateXY:%f  %f  \033[0m", finStateXYTheta.x(), finStateXYTheta.y());
+        RCLCPP_INFO(logger_, "error: %f", FinalIntegralXYError.norm());
     }
     VecCoeffChainX.array() += EqualRho[0] * (FinalIntegralXYError.x() + EqualLambda[0]/EqualRho[0]);
     VecCoeffChainY.array() += EqualRho[1] * (FinalIntegralXYError.y() + EqualLambda[1]/EqualRho[1]);
 
 
     if(ifprint){
-        ROS_INFO("cost: %f", cost);
-        ROS_INFO("cost corridor: %f", cost_corrb);
-        ROS_INFO("cost end p: %f", cost_endp);
-        ROS_INFO("cost v: %f", cost_v);
-        ROS_INFO("cost a: %f", cost_a);
-        ROS_INFO("cost omega: %f", cost_omega);
-        ROS_INFO("cost domega: %f", cost_domega);
-        ROS_INFO("cost moment: %f", cost_moment);
-        ROS_INFO("cost meanT: %f", cost_meanT);
-        ROS_INFO("cost centripetal_acc: %f", cost_centripetal_acc);
+        RCLCPP_INFO(logger_, "cost: %f", cost);
+        RCLCPP_INFO(logger_, "cost corridor: %f", cost_corrb);
+        RCLCPP_INFO(logger_, "cost end p: %f", cost_endp);
+        RCLCPP_INFO(logger_, "cost v: %f", cost_v);
+        RCLCPP_INFO(logger_, "cost a: %f", cost_a);
+        RCLCPP_INFO(logger_, "cost omega: %f", cost_omega);
+        RCLCPP_INFO(logger_, "cost domega: %f", cost_domega);
+        RCLCPP_INFO(logger_, "cost moment: %f", cost_moment);
+        RCLCPP_INFO(logger_, "cost meanT: %f", cost_meanT);
+        RCLCPP_INFO(logger_, "cost centripetal_acc: %f", cost_centripetal_acc);
     } 
  
     // Push the coefficients to the gradient, note that this part must be after the final state constraints and collision constraints
@@ -949,13 +949,13 @@ void MSPlanner::attachPenaltyFunctional(double &cost){
     }
 }
 
-double MSPlanner::costFunctionCallbackPath(void *ptr,
+double MincoSmoother::costFunctionCallbackPath(void *ptr,
                                          const Eigen::VectorXd &x,
                                          Eigen::VectorXd &g){
     if(x.norm()>1e4){
         return inf;
     }
-    MSPlanner &obj = *(MSPlanner *)ptr;
+    MincoSmoother &obj = *(MincoSmoother *)ptr;
     ++obj.iter_num_;
     int offset = 0;
     Eigen::Map<const Eigen::MatrixXd> P(x.data()+offset, 2, obj.TrajNum - 1);
@@ -996,7 +996,7 @@ double MSPlanner::costFunctionCallbackPath(void *ptr,
     return cost;
 }
 
-void MSPlanner::attachPenaltyFunctionalPath(double &cost){
+void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
     double ini_x = iniStateXYTheta.x();
     double ini_y = iniStateXYTheta.y();
 
