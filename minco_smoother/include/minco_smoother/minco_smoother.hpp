@@ -237,6 +237,7 @@ private:
   // Trajectory prediction resolution for get_the_predicted_state
   double trajPredictResolution_;
 
+  bool if_visual_optimization_ = false;
 };
 
 } // namespace minco_smoother
