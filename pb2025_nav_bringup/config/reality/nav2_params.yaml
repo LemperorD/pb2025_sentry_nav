@@ -3,7 +3,7 @@ livox_ros_driver2:
     xfer_format: 4                                      # 0-PointCloud2Msg(PointXYZRTL), 1-LivoxCustomMsg, 2-PclPxyziMsg, 3-LivoxImuMsg, 4-AllMsg
     multi_topic: 0                                      # 0-All LiDARs share the same topic, 1-One LiDAR one topic
     data_src: 0                                         # 0-lidar, others-Invalid data src
-    publish_freq: 20.0                                  # frequency of publish, 5.0, 10.0, 20.0, 50.0, etc.
+    publish_freq: 50.0                                  # frequency of publish, 5.0, 10.0, 20.0, 50.0, etc.
     output_data_type: 0
     frame_id: front_mid360
     user_config_path: $(find-pkg-share pb2025_nav_bringup)/config/reality/mid360_user_config.json
@@ -81,7 +81,7 @@ point_lio:
       tf_send_en: False                                 # True: send transform from 'camera_init' to 'aft_mapped'
 
     pcd_save:
-      pcd_save_en: False
+      pcd_save_en: True
       interval: -1                                      # how many LiDAR frames saved in each pcd file;
                                                         # -1 : all frames will be saved in ONE pcd file, may lead to memory crash when having too much frames.
 
