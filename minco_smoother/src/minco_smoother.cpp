@@ -302,8 +302,8 @@ bool MincoSmoother::get_state(const FlatTrajData &flat_traj){
       Innerpoints_.col(i) = flat_traj.UnOccupied_traj_pts[i].head(2);
   }
 
-  inner_init_positions_ = flat_traj.UnOccupied_positions;
-  inner_init_positions_.push_back(flat_traj.final_state_XYTheta);
+  inner_init_positions__ = flat_traj.UnOccupied_positions;
+  inner_init_positions__.push_back(flat_traj.final_state_XYTheta);
 
   iniState_ = flat_traj.start_state;
   finState_ = flat_traj.final_state;
@@ -940,12 +940,12 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
   }
 
   // final position constraint
-  FinalIntegralXYError = VecTrajFinalXY.back() - finStateXYTheta.head(2);
+  FinalIntegralXYError = VecTrajFinalXY.back() - finStateXYTheta_.head(2);
   cost += 0.5 * (EqualRho[0] * pow(FinalIntegralXYError.x() + EqualLambda[0]/EqualRho[0], 2) + EqualRho[1] * pow(FinalIntegralXYError.y() + EqualLambda[1]/EqualRho[1], 2));
   cost_endp += 0.5 * (EqualRho[0] * pow(FinalIntegralXYError.x() + EqualLambda[0]/EqualRho[0], 2) + EqualRho[1] * pow(FinalIntegralXYError.y() + EqualLambda[1]/EqualRho[1], 2));
   if(ifprint){
     RCLCPP_INFO(logger_, "\033[40;33m iter finStateXY:%f  %f  \033[0m", VecTrajFinalXY.back().x(), VecTrajFinalXY.back().y());
-    RCLCPP_INFO(logger_, "\033[40;33m real finStateXY:%f  %f  \033[0m", finStateXYTheta.x(), finStateXYTheta.y());
+    RCLCPP_INFO(logger_, "\033[40;33m real finStateXY:%f  %f  \033[0m", finStateXYTheta_.x(), finStateXYTheta_.y());
     RCLCPP_INFO(logger_, "error: %f", FinalIntegralXYError.norm());
   }
   VecCoeffChainX.array() += EqualRho[0] * (FinalIntegralXYError.x() + EqualLambda[0]/EqualRho[0]);
@@ -1265,7 +1265,7 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
       partialGradByTimes_.array() += PathpenaltyWt_.mean_time_weight * 2.0 * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_)  * (- mean_time_lowBound_ / TrajNum_);
       partialGradByTimes_(i) += PathpenaltyWt_.mean_time_weight * 2.0 * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_);
     }
-    if (pieceTime_[i] > unoccupied_averageT * mean_time_uppBound_){
+    if( pieceTime_[i] > unoccupied_averageT * mean_time_uppBound_){
       cost += PathpenaltyWt_.mean_time_weight * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_) * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_);
       cost_meanT += PathpenaltyWt_.mean_time_weight * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_) * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_);
       partialGradByTimes_.array() += PathpenaltyWt_.mean_time_weight * 2.0 * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_)  * (- mean_time_uppBound_ / TrajNum_);
@@ -1274,9 +1274,9 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
 
     // Path point constraint
     Eigen::Vector2d innerpointXY = VecTrajFinalXY[i+1];
-    violaPos = (innerpointXY - inner_init_positions[i].head(2)).squaredNorm();
-    VecCoeffChainX.head((i+1)*(SamNumEachPart+1)).array() += PathpenaltyWt_.bigpath_sdf_weight * 2.0 * (innerpointXY.x() - inner_init_positions[i].x());
-    VecCoeffChainY.head((i+1)*(SamNumEachPart+1)).array() += PathpenaltyWt_.bigpath_sdf_weight * 2.0 * (innerpointXY.y() - inner_init_positions[i].y());
+    violaPos = (innerpointXY - inner_init_positions_[i].head(2)).squaredNorm();
+    VecCoeffChainX.head((i+1)*(SamNumEachPart+1)).array() += PathpenaltyWt_.bigpath_sdf_weight * 2.0 * (innerpointXY.x() - inner_init_positions_[i].x());
+    VecCoeffChainY.head((i+1)*(SamNumEachPart+1)).array() += PathpenaltyWt_.bigpath_sdf_weight * 2.0 * (innerpointXY.y() - inner_init_positions_[i].y());
     cost += PathpenaltyWt_.bigpath_sdf_weight * violaPos;
     cost_bp += PathpenaltyWt_.bigpath_sdf_weight * violaPos;
   }
