@@ -240,9 +240,9 @@ private:
   std::vector<Eigen::Vector2d> collision_point_;
 
   // unchanged auxiliary parameters in the loop
-  int SamNumEachPart;
+  int SamNumEachPart_;
   // Simpson integration coefficients for each sampling point
-  Eigen::VectorXd IntegralChainCoeff;
+  Eigen::VectorXd IntegralChainCoeff_;
 
   // checkpoints for collision check
   std::vector<Eigen::Vector2d> check_point;

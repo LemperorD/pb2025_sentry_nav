@@ -656,18 +656,18 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
   std::vector<Eigen::MatrixXd> VecSingleYGradCTheta;
   std::vector<Eigen::VectorXd> VecSingleYGradT;
 
-  Eigen::MatrixXd SingleXGradCS(6,SamNumEachPart+1);
-  Eigen::MatrixXd SingleXGradCTheta(6,SamNumEachPart+1);
-  Eigen::VectorXd SingleXGradT(SamNumEachPart+1);
-  Eigen::MatrixXd SingleYGradCS(6,SamNumEachPart+1);
-  Eigen::MatrixXd SingleYGradCTheta(6,SamNumEachPart+1);
-  Eigen::VectorXd SingleYGradT(SamNumEachPart+1);
+  Eigen::MatrixXd SingleXGradCS(6,SamNumEachPart_+1);
+  Eigen::MatrixXd SingleXGradCTheta(6,SamNumEachPart_+1);
+  Eigen::VectorXd SingleXGradT(SamNumEachPart_+1);
+  Eigen::MatrixXd SingleYGradCS(6,SamNumEachPart_+1);
+  Eigen::MatrixXd SingleYGradCTheta(6,SamNumEachPart_+1);
+  Eigen::VectorXd SingleYGradT(SamNumEachPart_+1);
   Eigen::VectorXd IntegralX(sparseResolution_);
   Eigen::VectorXd IntegralY(sparseResolution_);
 
   // Used to store the positions obtained by integration
-  Eigen::VectorXd VecCoeffChainX(TrajNum_*(SamNumEachPart+1));VecCoeffChainX.setZero();
-  Eigen::VectorXd VecCoeffChainY(TrajNum_*(SamNumEachPart+1));VecCoeffChainY.setZero();
+  Eigen::VectorXd VecCoeffChainX(TrajNum_*(SamNumEachPart_+1));VecCoeffChainX.setZero();
+  Eigen::VectorXd VecCoeffChainY(TrajNum_*(SamNumEachPart_+1));VecCoeffChainY.setZero();
   Eigen::Vector2d CurrentPointXY(ini_x, ini_y);
 
   for(int i=0; i<TrajNum_; i++){
@@ -681,7 +681,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
     
     s1 = 0.0;
 
-    for(int j=0; j<=SamNumEachPart; j++){
+    for(int j=0; j<=SamNumEachPart_; j++){
       if(j%2 == 0){
         s2 = s1 * s1;
         s3 = s2 * s1;
@@ -692,9 +692,9 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
         beta2 << 0.0, 0.0, 2.0, 6.0 * s1, 12.0 * s2, 20.0 * s3;
         beta3 << 0.0, 0.0, 0.0, 6.0, 24.0 * s1, 60.0 * s2;
         s1 += halfstep;        
-        IntegralAlpha = 1.0 / SamNumEachPart * j;
+        IntegralAlpha = 1.0 / SamNumEachPart_ * j;
         Alpha = 1.0 / sparseResolution_ * (double(j)/2); 
-        omg = (j==0||j==SamNumEachPart)? 0.5:1;
+        omg = (j==0||j==SamNumEachPart_)? 0.5:1;
         omgstep = omg * step;
         sigma = c.transpose() * beta0;
         dsigma = c.transpose() * beta1;
@@ -711,7 +711,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
             IntegralX[j/2-1] += CoeffIntegral * dsigma.y() * cosyaw;
             IntegralY[j/2-1] += CoeffIntegral * dsigma.y() * sinyaw;
           }
-          if(j!=SamNumEachPart){
+          if(j!=SamNumEachPart_){
             IntegralX[j/2] += CoeffIntegral * dsigma.y() * cosyaw;
             IntegralY[j/2] += CoeffIntegral * dsigma.y() * sinyaw;
           }
@@ -729,7 +729,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
             IntegralX[j/2-1] += CoeffIntegral * (dsigma.y() * cosyaw + dsigma.x() * ICR_.z() * sinyaw);
             IntegralY[j/2-1] += CoeffIntegral * (dsigma.y() * sinyaw - dsigma.x() * ICR_.z() * cosyaw);
           }
-          if(j!=SamNumEachPart){
+          if(j!=SamNumEachPart_){
             IntegralX[j/2] += CoeffIntegral * (dsigma.y() * cosyaw + dsigma.x() * ICR_.z() * sinyaw);
             IntegralY[j/2] += CoeffIntegral * (dsigma.y() * sinyaw - dsigma.x() * ICR_.z() * cosyaw);
           }
@@ -859,8 +859,8 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
           }
         }
         if(if_coolision){
-          VecCoeffChainX.head(i*(SamNumEachPart+1)+j+1).array() += all_grad2Pos.x();
-          VecCoeffChainY.head(i*(SamNumEachPart+1)+j+1).array() += all_grad2Pos.y();
+          VecCoeffChainX.head(i*(SamNumEachPart_+1)+j+1).array() += all_grad2Pos.x();
+          VecCoeffChainY.head(i*(SamNumEachPart_+1)+j+1).array() += all_grad2Pos.y();
         }
 
         partialGradByCoeffs_.block<6,2>(i*6, 0) += beta0 * gradBeta.row(0) + beta1 * gradBeta.row(1) + beta2 * gradBeta.row(2);
@@ -875,7 +875,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
         beta1 << 0.0, 1.0, 2.0 * s1, 3.0 * s2, 4.0 * s3, 5.0 * s4;
         beta2 << 0.0, 0.0, 2.0, 6.0 * s1, 12.0 * s2, 20.0 * s3;
         s1 += halfstep;
-        IntegralAlpha = 1.0 / SamNumEachPart * j;
+        IntegralAlpha = 1.0 / SamNumEachPart_ * j;
         sigma = c.transpose() * beta0;
         dsigma = c.transpose() * beta1;
         ddsigma = c.transpose() * beta2;
@@ -968,8 +968,8 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
   // Push the coefficients to the gradient, note that this part must be after the final state constraints and collision constraints
   for(int i=0; i<TrajNum_; i++){
     ///////////////////////////////////////////////////////////////////////////
-    Eigen::VectorXd CoeffX = VecCoeffChainX.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
-    Eigen::VectorXd CoeffY = VecCoeffChainY.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
+    Eigen::VectorXd CoeffX = VecCoeffChainX.block(i*(SamNumEachPart_+1),0,SamNumEachPart_+1,1).cwiseProduct(IntegralChainCoeff_);
+    Eigen::VectorXd CoeffY = VecCoeffChainY.block(i*(SamNumEachPart_+1),0,SamNumEachPart_+1,1).cwiseProduct(IntegralChainCoeff_);
     
     partialGradByCoeffs_.block<6,1>(i*6, 1) += VecSingleXGradCS[i] * CoeffX;
     partialGradByCoeffs_.block<6,1>(i*6, 0) += VecSingleXGradCTheta[i] * CoeffX;
@@ -1035,7 +1035,7 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
   Eigen::Matrix<double, 6, 1> beta0, beta1, beta2, beta3;
   double s1, s2, s3, s4, s5;
   Eigen::Vector2d sigma, dsigma, ddsigma, dddsigma;
-  int SamNumEachPart = 2 * sparseResolution_;
+  int SamNumEachPart_ = 2 * sparseResolution_;
   double IntegralAlpha, omg;
 
   double unoccupied_averageT;
@@ -1052,10 +1052,10 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
   Eigen::Matrix2d help_L;
   Eigen::Vector2d gradESDF2d;
 
-  Eigen::VectorXd IntegralChainCoeff(SamNumEachPart + 1);
-  IntegralChainCoeff.setZero();
+  Eigen::VectorXd IntegralChainCoeff_(SamNumEachPart_ + 1);
+  IntegralChainCoeff_.setZero();
   for(int i=0; i<sparseResolution_; i++){
-      IntegralChainCoeff.block(2*i,0,3,1) += Eigen::Vector3d(1.0, 4.0, 1.0);
+      IntegralChainCoeff_.block(2*i,0,3,1) += Eigen::Vector3d(1.0, 4.0, 1.0);
   }
 
   std::vector<Eigen::VectorXd> VecIntegralX(TrajNum_);
@@ -1070,8 +1070,8 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
   std::vector<Eigen::MatrixXd> VecSingleYGradCTheta(TrajNum_);
   std::vector<Eigen::VectorXd> VecSingleYGradT(TrajNum_);
 
-  Eigen::VectorXd VecCoeffChainX(TrajNum_*(SamNumEachPart+1));VecCoeffChainX.setZero();
-  Eigen::VectorXd VecCoeffChainY(TrajNum_*(SamNumEachPart+1));VecCoeffChainY.setZero();
+  Eigen::VectorXd VecCoeffChainX(TrajNum_*(SamNumEachPart_+1));VecCoeffChainX.setZero();
+  Eigen::VectorXd VecCoeffChainY(TrajNum_*(SamNumEachPart_+1));VecCoeffChainY.setZero();
   // Eigen::Vector2d CurrentPointXY(ini_x, ini_y);
 
   for(int i=0; i<TrajNum_; i++){
@@ -1079,17 +1079,17 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
     double step = pieceTime_[i] / sparseResolution_;
     double halfstep = step / 2;
     double CoeffIntegral = pieceTime_[i] / sparseResolution_ / 6;
-    Eigen::MatrixXd SingleXGradCS(6,SamNumEachPart+1);
-    Eigen::MatrixXd SingleXGradCTheta(6,SamNumEachPart+1);
-    Eigen::VectorXd SingleXGradT(SamNumEachPart+1);
-    Eigen::MatrixXd SingleYGradCS(6,SamNumEachPart+1);
-    Eigen::MatrixXd SingleYGradCTheta(6,SamNumEachPart+1);
-    Eigen::VectorXd SingleYGradT(SamNumEachPart+1);
+    Eigen::MatrixXd SingleXGradCS(6,SamNumEachPart_+1);
+    Eigen::MatrixXd SingleXGradCTheta(6,SamNumEachPart_+1);
+    Eigen::VectorXd SingleXGradT(SamNumEachPart_+1);
+    Eigen::MatrixXd SingleYGradCS(6,SamNumEachPart_+1);
+    Eigen::MatrixXd SingleYGradCTheta(6,SamNumEachPart_+1);
+    Eigen::VectorXd SingleYGradT(SamNumEachPart_+1);
 
     Eigen::VectorXd IntegralX(sparseResolution_);IntegralX.setZero();
     Eigen::VectorXd IntegralY(sparseResolution_);IntegralY.setZero();
     s1 = 0.0;
-    for(int j=0; j<=SamNumEachPart; j++){
+    for(int j=0; j<=SamNumEachPart_; j++){
       if(j%2 == 0){
         s2 = s1 * s1;
         s3 = s2 * s1;
@@ -1100,8 +1100,8 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
         beta2 << 0.0, 0.0, 2.0, 6.0 * s1, 12.0 * s2, 20.0 * s3;
         beta3 << 0.0, 0.0, 0.0, 6.0, 24.0 * s1, 60.0 * s2;
         s1 += halfstep;        
-        IntegralAlpha = 1.0 / SamNumEachPart * j;
-        omg = (j==0||j==SamNumEachPart)? 0.5:1;
+        IntegralAlpha = 1.0 / SamNumEachPart_ * j;
+        omg = (j==0||j==SamNumEachPart_)? 0.5:1;
         sigma = c.transpose() * beta0;
         dsigma = c.transpose() * beta1;
         ddsigma = c.transpose() * beta2;
@@ -1113,7 +1113,7 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
               IntegralX[j/2-1] += CoeffIntegral * dsigma.y() * cosyaw;
               IntegralY[j/2-1] += CoeffIntegral * dsigma.y() * sinyaw;
           }
-          if(j!=SamNumEachPart){
+          if(j!=SamNumEachPart_){
               IntegralX[j/2] += CoeffIntegral * dsigma.y() * cosyaw;
               IntegralY[j/2] += CoeffIntegral * dsigma.y() * sinyaw;
           }
@@ -1131,7 +1131,7 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
               IntegralX[j/2-1] += CoeffIntegral * (dsigma.y() * cosyaw + dsigma.x() * ICR_.z() * sinyaw);
               IntegralY[j/2-1] += CoeffIntegral * (dsigma.y() * sinyaw - dsigma.x() * ICR_.z() * cosyaw);
           }
-          if(j!=SamNumEachPart){
+          if(j!=SamNumEachPart_){
               IntegralX[j/2] += CoeffIntegral * (dsigma.y() * cosyaw + dsigma.x() * ICR_.z() * sinyaw);
               IntegralY[j/2] += CoeffIntegral * (dsigma.y() * sinyaw - dsigma.x() * ICR_.z() * cosyaw);
           }
@@ -1211,7 +1211,7 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
         beta1 << 0.0, 1.0, 2.0 * s1, 3.0 * s2, 4.0 * s3, 5.0 * s4;
         beta2 << 0.0, 0.0, 2.0, 6.0 * s1, 12.0 * s2, 20.0 * s3;
         s1 += halfstep;
-        IntegralAlpha = 1.0 / SamNumEachPart * j;
+        IntegralAlpha = 1.0 / SamNumEachPart_ * j;
         sigma = c.transpose() * beta0;
         dsigma = c.transpose() * beta1;
         ddsigma = c.transpose() * beta2;
@@ -1275,8 +1275,8 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
     // Path point constraint
     Eigen::Vector2d innerpointXY = VecTrajFinalXY[i+1];
     violaPos = (innerpointXY - inner_init_positions_[i].head(2)).squaredNorm();
-    VecCoeffChainX.head((i+1)*(SamNumEachPart+1)).array() += PathpenaltyWt_.bigpath_sdf_weight * 2.0 * (innerpointXY.x() - inner_init_positions_[i].x());
-    VecCoeffChainY.head((i+1)*(SamNumEachPart+1)).array() += PathpenaltyWt_.bigpath_sdf_weight * 2.0 * (innerpointXY.y() - inner_init_positions_[i].y());
+    VecCoeffChainX.head((i+1)*(SamNumEachPart_+1)).array() += PathpenaltyWt_.bigpath_sdf_weight * 2.0 * (innerpointXY.x() - inner_init_positions_[i].x());
+    VecCoeffChainY.head((i+1)*(SamNumEachPart_+1)).array() += PathpenaltyWt_.bigpath_sdf_weight * 2.0 * (innerpointXY.y() - inner_init_positions_[i].y());
     cost += PathpenaltyWt_.bigpath_sdf_weight * violaPos;
     cost_bp += PathpenaltyWt_.bigpath_sdf_weight * violaPos;
   }
@@ -1289,12 +1289,12 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
   } 
 
   for(int i=0; i<TrajNum_; i++){
-    partialGradByCoeffs_.block<6,1>(i*6, 1) += VecSingleXGradCS[i] * VecCoeffChainX.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
-    partialGradByCoeffs_.block<6,1>(i*6, 0) += VecSingleXGradCTheta[i] * VecCoeffChainX.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
-    partialGradByCoeffs_.block<6,1>(i*6, 1) += VecSingleYGradCS[i] * VecCoeffChainY.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
-    partialGradByCoeffs_.block<6,1>(i*6, 0) += VecSingleYGradCTheta[i] * VecCoeffChainY.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
-    partialGradByTimes_(i) += (VecSingleXGradT[i].cwiseProduct(VecCoeffChainX.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff))).sum();
-    partialGradByTimes_(i) += (VecSingleYGradT[i].cwiseProduct(VecCoeffChainY.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff))).sum();
+    partialGradByCoeffs_.block<6,1>(i*6, 1) += VecSingleXGradCS[i] * VecCoeffChainX.block(i*(SamNumEachPart_+1),0,SamNumEachPart_+1,1).cwiseProduct(IntegralChainCoeff_);
+    partialGradByCoeffs_.block<6,1>(i*6, 0) += VecSingleXGradCTheta[i] * VecCoeffChainX.block(i*(SamNumEachPart_+1),0,SamNumEachPart_+1,1).cwiseProduct(IntegralChainCoeff_);
+    partialGradByCoeffs_.block<6,1>(i*6, 1) += VecSingleYGradCS[i] * VecCoeffChainY.block(i*(SamNumEachPart_+1),0,SamNumEachPart_+1,1).cwiseProduct(IntegralChainCoeff_);
+    partialGradByCoeffs_.block<6,1>(i*6, 0) += VecSingleYGradCTheta[i] * VecCoeffChainY.block(i*(SamNumEachPart_+1),0,SamNumEachPart_+1,1).cwiseProduct(IntegralChainCoeff_);
+    partialGradByTimes_(i) += (VecSingleXGradT[i].cwiseProduct(VecCoeffChainX.block(i*(SamNumEachPart_+1),0,SamNumEachPart_+1,1).cwiseProduct(IntegralChainCoeff_))).sum();
+    partialGradByTimes_(i) += (VecSingleYGradT[i].cwiseProduct(VecCoeffChainY.block(i*(SamNumEachPart_+1),0,SamNumEachPart_+1,1).cwiseProduct(IntegralChainCoeff_))).sum();
   }
 }
 

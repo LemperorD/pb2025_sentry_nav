@@ -16,6 +16,8 @@
 #define NAV2_SMOOTHER__MINCO_SMOOTHER_UTIL_HPP_
 
 #include <cmath>
+#include <nav2_costmap_2d/costmap_2d.hpp>
+#include <nav2_costmap_2d/cost_values.hpp>
 
 namespace minco_smoother
 {
@@ -176,6 +178,18 @@ inline void backwardGradT(const Eigen::VectorXd &tau,
     gradTau(i) = gradT(i) * gradrt2vt;
   }
   return;
+}
+
+bool isStateValid(const Eigen::Vector2d & pos, const nav2_costmap_2d::Costmap2D* costmap)
+{
+  unsigned int mx, my;
+  if (!costmap->worldToMap(pos.x(), pos.y(), mx, my)) {
+    return false;
+  }
+
+  unsigned char cost = costmap->getCost(mx, my);
+
+  return cost < nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE;
 }
 
 }
