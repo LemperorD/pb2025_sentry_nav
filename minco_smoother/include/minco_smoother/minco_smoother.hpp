@@ -87,7 +87,7 @@ public:
 
 protected:
   /**
-   * @brief representation trajectory data from path
+   * @brief representation trajectory data from Nav2 Path to FlatTrajData
    * 
    * @param path Input path
    */
@@ -95,8 +95,19 @@ protected:
 
   bool minco_plan(FlatTrajData & flat_traj);
 
+  /**
+   * @brief get the optimized trajectory state
+   * 
+   * @param flat_traj Input flat trajectory data
+   * @return true if get state successfully
+   */
   bool get_state(const FlatTrajData & flat_traj);
 
+  /**
+   * @brief optimize the trajectory using L-BFGS
+   * 
+   * @return true if optimization is successful
+   */
   bool optimizer();
 
   static inline int earlyExit(void *instance,
@@ -226,10 +237,6 @@ private:
   Eigen::VectorXd init_EqualLambda_, init_EqualRho_, EqualRhoMax_, EqualGamma_;
   Eigen::VectorXd EqualLambda, EqualRho;
   Eigen::VectorXd EqualTolerance_;
-
-  Eigen::VectorXd Cut_init_EqualLambda_, Cut_init_EqualRho_, Cut_EqualRhoMax_, Cut_EqualGamma_;
-  Eigen::VectorXd Cut_EqualLambda, Cut_EqualRho;
-  Eigen::VectorXd Cut_EqualTolerance_;
 
   bool hrz_limited_;
   double hrz_laser_range_dgr_;
