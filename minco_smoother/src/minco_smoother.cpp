@@ -45,6 +45,7 @@ std::shared_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub){
   auto node = parent.lock();
   node_ = parent;
   if (!node) { throw nav2_core::PlannerException("Unable to lock node!"); }
+  logger_ = node->get_logger();
 
   costmap_sub_ = costmap_sub; tf_ = tf;
   plugin_name_ = name; logger_ = node->get_logger();
@@ -65,10 +66,10 @@ std::shared_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub){
   declare_parameter_if_not_declared(node, plugin_name_ + ".sample_time", rclcpp::ParameterValue(0.9));
     
   //---get parameters---
-  node->get_parameter(plugin_name_ + ".max_velocity", max_vel_);
-  node->get_parameter(plugin_name_ + ".max_acc", max_acc_);
-  node->get_parameter(plugin_name_ + ".max_omega", max_omega_);
-  node->get_parameter(plugin_name_ + ".max_domega", max_domega_);
+  node->get_parameter(plugin_name_ + ".max_velocity", config_.max_vel_);
+  node->get_parameter(plugin_name_ + ".max_acc", config_.max_acc_);
+  node->get_parameter(plugin_name_ + ".max_omega", config_.max_omega_);
+  node->get_parameter(plugin_name_ + ".max_domega", config_.max_domega_);
   node->get_parameter(plugin_name_ + ".safe_distance", safe_dis_);
   node->get_parameter(plugin_name_ + ".max_jps_dis", max_jps_dis_);
   node->get_parameter(plugin_name_ + ".distance_weight", distance_weight_);
@@ -91,7 +92,7 @@ bool MincoSmoother::smooth(nav_msgs::msg::Path & path, const rclcpp::Duration & 
 }
 
 FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path){
-  //-------add Yaw and pathlength to each traj point---------
+  //-------getSamplePoints---------
   Unoccupied_sample_trajs_.clear();
   double cur_theta;
   Eigen::VectorXd state5d; state5d.resize(5);// x y theta dtheta ds
@@ -133,8 +134,8 @@ FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path
   normalizeAngle(Unoccupied_sample_trajs_.back()[2], cur_theta);
   state5d << pt.pose.position.x, pt.pose.position.y, cur_theta, cur_theta - Unoccupied_sample_trajs_.back()[2], 0;
   Unoccupied_sample_trajs_.push_back(state5d);
-  //-------add Yaw and pathlength to each traj point finish---------
 
+  //-------getTrajsWithTime(no cut)---------
   std::vector<double> Unoccupied_thetas;
   std::vector<double> Unoccupied_pathlengths; 
   std::vector<double> Unoccupied_Weightpathlengths; 
@@ -157,7 +158,8 @@ FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path
     Unoccupied_Weightpathlengths.push_back(Unoccupied_AllWeightingPathLength_);
   }
 
-  double totalTrajTime_ = evaluateDuration(Unoccupied_AllWeightingPathLength_, current_state_VAJ_.x(), 0.0, max_vel_, max_acc_);
+  double totalTrajTime_ = evaluateDuration(Unoccupied_AllWeightingPathLength_, current_state_VAJ_.x(), 0.0,
+                                           config_.max_vel_, config_.max_acc_);
   std::vector<Eigen::Vector3d> Unoccupied_traj_pts; // Store the sampled coordinates yaw, s, t
   std::vector<Eigen::Vector3d> Unoccupied_positions; // Store the sampled coordinates x, y, yaw
 
@@ -171,7 +173,7 @@ FlatTrajData MincoSmoother::getTrajDataFromPath(const nav_msgs::msg::Path & path
 
   for(double samplet = Unoccupied_sampletime; samplet<Unoccupied_totalTrajTime_-1e-3; samplet+=Unoccupied_sampletime){
     double arc = evaluateLength(samplet, Unoccupied_AllWeightingPathLength_,
-                                Unoccupied_totalTrajTime_, current_state_VAJ_.x(), 0.0, max_vel_, max_acc_);
+                                Unoccupied_totalTrajTime_, current_state_VAJ_.x(), 0.0, config_.max_vel_, config_.max_acc_);
     for (int k = Unoccupied_PathNodeIndex; k<PathNodeNum; k++){
       Eigen::VectorXd pathnode = Unoccupied_sample_trajs_[k];
       Eigen::VectorXd prepathnode = Unoccupied_sample_trajs_[k-1];
@@ -230,14 +232,14 @@ bool MincoSmoother::minco_plan(FlatTrajData & flat_traj){
         return false;
     current = ros::Time::now();
     if(optimizer())
-        RCLCPP_INFO(logger_, "\033[41;37m minco_ optimizer time:%f \033[0m", (ros::Time::now()-current).toSec());
+        RCLCPP_INFO(logger_, "\033[41;37m Minco optimizer time:%f \033[0m", (ros::Time::now()-current).toSec());
     else
         return false;
 
     minco_.getTrajectory(optimizer_traj_);
-    final_collision = check_final_collision(optimizer_traj_, iniStateXYTheta);
+    final_collision = check_final_collision(optimizer_traj_, iniStateXYTheta_);
     if(final_collision){
-        penaltyWt.time_weight *= 0.75;
+        penaltyWt_.time_weight *= 0.75;
         // safeDis *= 1.2;
     }
     else{
@@ -289,14 +291,14 @@ bool MincoSmoother::optimizer(){
 
   // 2*(N-1) intermediate points, 1 relaxed S, N times
   int variable_num_ = 3 * TrajNum_ - 1;
-  // ROS_INFO_STREAM("iniStates: \n" << iniState_);
-  // ROS_INFO_STREAM("finStates: \n" << finState_);
-  // ROS_INFO("TrajNum_: %d", TrajNum_);
+
+  // ROS_INFO_STREAM(logger_, "iniStates: \n" << iniState_);
+  // ROS_INFO_STREAM(logger_, "finStates: \n" << finState_);
+  // ROS_INFO(logger_, "TrajNum: %d", TrajNum_);
+
   minco_.setConditions(iniState_, finState_, TrajNum_, energyWeights_);
-
-  // ROS_INFO_STREAM("init Innerpoints: \n" << Innerpoints_);
-  // ROS_INFO_STREAM("init pieceTime: " << pieceTime_.transpose());
-
+  // ROS_INFO_STREAM(logger_, "init Innerpoints: \n" << Innerpoints_);
+  // ROS_INFO_STREAM(logger_, "init pieceTime_: " << pieceTime_.transpose());
   minco_.setParameters(Innerpoints_, pieceTime_);   
   minco_.getTrajectory(init_final_traj_);
   Eigen::VectorXd x;
@@ -326,12 +328,12 @@ bool MincoSmoother::optimizer(){
 
   ifprint = false;
   result = lbfgs::lbfgs_optimize(x,
-                              cost,
-                              MincoSmoother::costFunctionCallbackPath,
-                              NULL,
-                              NULL,
-                              this,
-                              path_lbfgs_params_.path_lbfgs_params);
+                                 cost,
+                                 MincoSmoother::costFunctionCallbackPath,
+                                 NULL,
+                                 NULL,
+                                 this,
+                                 path_lbfgs_params_.path_lbfgs_params);
 
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -553,8 +555,8 @@ double MincoSmoother::costFunctionCallback(void *ptr,
   obj.minco_.setTConditions(obj.finState_);
   obj.minco_.setParameters(obj.Innerpoints_,obj.pieceTime_);
   obj.minco_.getEnergy(cost);
-  obj.minco_.getEnergyPartialGradByCoeffs(obj.partialGradByCoeffs);
-  obj.minco_.getEnergyPartialGradByTimes(obj.partialGradByTimes);
+  obj.minco_.getEnergyPartialGradByCoeffs(obj.partialGradByCoeffs_);
+  obj.minco_.getEnergyPartialGradByTimes(obj.partialGradByTimes_);
   if(obj.ifprint){
     RCLCPP_INFO(logger_, "Energy cost: %f", cost);
   }
@@ -562,21 +564,21 @@ double MincoSmoother::costFunctionCallback(void *ptr,
   if(obj.ifprint){
     RCLCPP_INFO(logger_, "attachPenaltyFunctional cost: %f", cost);
   }
-  obj.minco_.propogateArcYawLenghGrad(obj.partialGradByCoeffs, obj.partialGradByTimes,
-                                      obj.gradByPoints, obj.gradByTimes, obj.gradByTailStateS);
+  obj.minco_.propogateArcYawLenghGrad(obj.partialGradByCoeffs_, obj.partialGradByTimes_,
+                                      obj.gradByPoints_, obj.gradByTimes_, obj.gradByTailStateS_);
 
   cost += obj.penaltyWt_.time_weight * obj.pieceTime_.sum();
   if(obj.ifprint){
-    RCLCPP_INFO(logger_, "T cost: %f", obj.penaltyWt.time_weight * obj.pieceTime_.sum());
+    RCLCPP_INFO(logger_, "T cost: %f", obj.penaltyWt_.time_weight * obj.pieceTime_.sum());
   }
   Eigen::VectorXd rhotimes;
-  rhotimes.resize(obj.gradByTimes.size());
-  obj.gradByTimes += obj.penaltyWt.time_weight * rhotimes.setOnes();
-  
-  *gradTailS = obj.gradByTailStateS.y();
+  rhotimes.resize(obj.gradByTimes_.size());
+  obj.gradByTimes_ += obj.penaltyWt_.time_weight * rhotimes.setOnes();
 
-  gradP = obj.gradByPoints;
-  backwardGradT(t, obj.gradByTimes, gradt);
+  *gradTailS = obj.gradByTailStateS_.y();
+
+  gradP = obj.gradByPoints_;
+  backwardGradT(t, obj.gradByTimes_, gradt);
   
   return cost;
 }
@@ -594,7 +596,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
   double unoccupied_averageT;
   unoccupied_averageT = pieceTime_.mean();
   
-  double cost_corrb=0, cost_v=0, cost_a=0, cost_omega = 0, cost_domega=0, cost_endp=0, cost_moment=0, cost_meanT=0, cost_centripetal_acc=0;
+  double cost_corrb=0, cost_v=0, cost_a=0, cost_omega=0, cost_domega=0, cost_endp=0, cost_moment=0, cost_meanT=0, cost_centripetal_acc=0;
   
   double violaAcc, violaAlp, violaPos, violaMom, violaCenAcc;
   double violaAccPena, violaAlpPena, violaPosPena, violaMomPena, violaCenAccPena;
@@ -607,7 +609,6 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
   Eigen::Matrix2d help_L;
   Eigen::Vector3d gradESDF;
   Eigen::Vector2d gradESDF2d;
-  
 
   // Used to obtain the position of each integral point
   std::vector<Eigen::VectorXd> VecIntegralX;
@@ -713,16 +714,16 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
                           - ddsigma.x() * ICR_.z() * cosyaw + dsigma.x() * dsigma.x() * ICR_.z() * sinyaw)*IntegralAlpha*CoeffIntegral
                           + (dsigma.y() * sinyaw - dsigma.x() * ICR_.z() * cosyaw) /sparseResolution_6_;
         }
-        
-        
-        violaAcc = ddsigma.y()*ddsigma.y() - config_.max_acc_*config_.max_acc_;
-        violaAlp = ddsigma.x()*ddsigma.x() - config_.max_domega_*config_.max_domega_;
-        
+
+
+        violaAcc = ddsigma.y()*ddsigma.y() - config_.max_acc_ * config_.max_acc_;
+        violaAlp = ddsigma.x()*ddsigma.x() - config_.max_domega_ * config_.max_domega_;
+
         if(violaAcc > 0){
           positiveSmoothedL1(violaAcc, violaAccPena, violaAccPenaD);
           gradViolaAT = 2.0 * Alpha * ddsigma.y() * dddsigma.y();
           gradBeta(2,1) +=  omgstep * penaltyWt_.acc_weight * violaAccPenaD * 2.0 * ddsigma.y();
-          partialGradByTimes(i) += omg * penaltyWt_.acc_weight * (violaAccPenaD * gradViolaAT * step + violaAccPena / sparseResolution_);
+          partialGradByTimes_(i) += omg * penaltyWt_.acc_weight * (violaAccPenaD * gradViolaAT * step + violaAccPena / sparseResolution_);
           cost += omgstep * penaltyWt_.acc_weight * violaAccPena;
           cost_a += omgstep * penaltyWt_.acc_weight * violaAccPena;
         }
@@ -730,7 +731,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
           positiveSmoothedL1(violaAlp, violaAlpPena, violaAlpPenaD);
           gradViolaDOT = 2.0 * Alpha * ddsigma.x() * dddsigma.x();
           gradBeta(2,0) += omgstep * penaltyWt_.domega_weight * violaAlpPenaD * 2.0 * ddsigma.x();
-          partialGradByTimes(i) += omg * penaltyWt_.domega_weight * (violaAlpPenaD * gradViolaDOT * step + violaAlpPena / sparseResolution_);
+          partialGradByTimes_(i) += omg * penaltyWt_.domega_weight * (violaAlpPenaD * gradViolaDOT * step + violaAlpPena / sparseResolution_);
           cost += omgstep * penaltyWt_.domega_weight * violaAlpPena;
           cost_domega += omgstep * penaltyWt_.domega_weight * violaAlpPena;
         }
@@ -743,7 +744,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
             gradViolaPt = 2.0 * Alpha * dsigma.y()
                             * ddsigma.y();
             gradBeta(1,1) += omgstep * penaltyWt_.moment_weight * violaVelPenaD * 2.0 * dsigma.y();
-            partialGradByTimes(i) += omg * penaltyWt_.moment_weight * (violaVelPenaD * gradViolaPt * step + violaVelPena / sparseResolution_);
+            partialGradByTimes_(i) += omg * penaltyWt_.moment_weight * (violaVelPenaD * gradViolaPt * step + violaVelPena / sparseResolution_);
             cost += omgstep * penaltyWt_.moment_weight * violaVelPena;
             cost_moment += omgstep * penaltyWt_.moment_weight * violaVelPena;
           }
@@ -753,7 +754,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
             gradViolaPt = 2.0 * Alpha * dsigma.x()
                             * ddsigma.x();
             gradBeta(1,0) += omgstep * penaltyWt_.moment_weight * violaOmegaPenaD * 2.0 * dsigma.x();
-            partialGradByTimes(i) += omg * penaltyWt_.moment_weight * (violaOmegaPenaD * gradViolaPt * step + violaOmegaPena / sparseResolution_);
+            partialGradByTimes_(i) += omg * penaltyWt_.moment_weight * (violaOmegaPenaD * gradViolaPt * step + violaOmegaPena / sparseResolution_);
             cost += omgstep * penaltyWt_.moment_weight * violaOmegaPena;
             cost_moment += omgstep * penaltyWt_.moment_weight * violaOmegaPena;
           }
@@ -766,11 +767,11 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
             if(violaMom > 0){
               positiveSmoothedL1(violaMom, violaMomPena, violaMomPenaD);
               gradViolaMt = Alpha * (omg_sym * config_.max_vel_ * ddsigma.x() + config_.max_omega_ * ddsigma.y());
-              gradBeta(1,0) += omgstep * penaltyWt.moment_weight * violaMomPenaD * omg_sym * config_.max_vel_;
-              gradBeta(1,1) += omgstep * penaltyWt.moment_weight * violaMomPenaD * config_.max_omega_;
-              partialGradByTimes(i) += omg * penaltyWt.moment_weight * (violaMomPenaD * gradViolaMt * step + violaMomPena / sparseResolution_);
-              cost += omgstep * penaltyWt.moment_weight * violaMomPena;
-              cost_moment += omgstep * penaltyWt.moment_weight * violaMomPena;
+              gradBeta(1,0) += omgstep * penaltyWt_.moment_weight * violaMomPenaD * omg_sym * config_.max_vel_;
+              gradBeta(1,1) += omgstep * penaltyWt_.moment_weight * violaMomPenaD * config_.max_omega_;
+              partialGradByTimes_(i) += omg * penaltyWt_.moment_weight * (violaMomPenaD * gradViolaMt * step + violaMomPena / sparseResolution_);
+              cost += omgstep * penaltyWt_.moment_weight * violaMomPena;
+              cost_moment += omgstep * penaltyWt_.moment_weight * violaMomPena;
             }
           }
           for(int omg_sym = -1; omg_sym <= 1; omg_sym += 2){
@@ -778,11 +779,11 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
             if(violaMom > 0){
               positiveSmoothedL1(violaMom, violaMomPena, violaMomPenaD);
               gradViolaMt = Alpha * (omg_sym * -config_.min_vel_ * ddsigma.x() - config_.max_omega_ * ddsigma.y());
-              gradBeta(1,0) += omgstep * penaltyWt.moment_weight * violaMomPenaD * omg_sym * -config_.min_vel_;
-              gradBeta(1,1) -= omgstep * penaltyWt.moment_weight * violaMomPenaD * config_.max_omega_;
-              partialGradByTimes(i) += omg * penaltyWt.moment_weight * (violaMomPenaD * gradViolaMt * step + violaMomPena / sparseResolution_);
-              cost += omgstep * penaltyWt.moment_weight * violaMomPena;
-              cost_moment += omgstep * penaltyWt.moment_weight * violaMomPena;
+              gradBeta(1,0) += omgstep * penaltyWt_.moment_weight * violaMomPenaD * omg_sym * -config_.min_vel_;
+              gradBeta(1,1) -= omgstep * penaltyWt_.moment_weight * violaMomPenaD * config_.max_omega_;
+              partialGradByTimes_(i) += omg * penaltyWt_.moment_weight * (violaMomPenaD * gradViolaMt * step + violaMomPena / sparseResolution_);
+              cost += omgstep * penaltyWt_.moment_weight * violaMomPena;
+              cost_moment += omgstep * penaltyWt_.moment_weight * violaMomPena;
             }
           }
         }
@@ -791,11 +792,11 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
         if(violaCenAcc > 0){
           positiveSmoothedL1(violaCenAcc, violaCenAccPena, violaCenAccPenaD);
           gradViolaCAt = 2.0 * Alpha * (dsigma.x() * dsigma.y() * dsigma.y() * ddsigma.x() + dsigma.y() * dsigma.x() * dsigma.x() * ddsigma.y());
-          gradBeta(1,0) += omgstep * penaltyWt.cen_acc_weight * violaCenAccPenaD * (2 * dsigma.x() * dsigma.y() * dsigma.y());
-          gradBeta(1,1) += omgstep * penaltyWt.cen_acc_weight * violaCenAccPenaD * (2 * dsigma.x() * dsigma.x() * dsigma.y());
-          partialGradByTimes(i) += omg * penaltyWt.cen_acc_weight * (violaCenAccPenaD * gradViolaCAt * step + violaCenAccPena / sparseResolution_);
-          cost += omgstep * penaltyWt.cen_acc_weight * violaCenAccPena;
-          cost_centripetal_acc += omgstep * penaltyWt.cen_acc_weight * violaCenAccPena;
+          gradBeta(1,0) += omgstep * penaltyWt_.cen_acc_weight * violaCenAccPenaD * (2 * dsigma.x() * dsigma.y() * dsigma.y());
+          gradBeta(1,1) += omgstep * penaltyWt_.cen_acc_weight * violaCenAccPenaD * (2 * dsigma.x() * dsigma.x() * dsigma.y());
+          partialGradByTimes_(i) += omg * penaltyWt_.cen_acc_weight * (violaCenAccPenaD * gradViolaCAt * step + violaCenAccPena / sparseResolution_);
+          cost += omgstep * penaltyWt_.cen_acc_weight * violaCenAccPena;
+          cost_centripetal_acc += omgstep * penaltyWt_.cen_acc_weight * violaCenAccPena;
         }
 
         // Collision constraint
@@ -820,7 +821,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
             gradViolaPt = -Alpha * dsigma.x() * gradESDF2d.transpose() * help_L * cp2D;
 
             gradBeta(0, 0) -= omgstep * penaltyWt_.collision_weight * violaPosPenaD * gradESDF2d.transpose() * help_L * cp2D;
-            partialGradByTimes(i) += omg * penaltyWt_.collision_weight * (violaPosPenaD * gradViolaPt * step + violaPosPena / sparseResolution_);
+            partialGradByTimes_(i) += omg * penaltyWt_.collision_weight * (violaPosPenaD * gradViolaPt * step + violaPosPena / sparseResolution_);
             cost += omgstep * penaltyWt_.collision_weight * violaPosPena;
             cost_corrb += omgstep * penaltyWt_.collision_weight * violaPosPena;
           }
@@ -830,7 +831,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
           VecCoeffChainY.head(i*(SamNumEachPart+1)+j+1).array() += all_grad2Pos.y();
         }
 
-        partialGradByCoeffs.block<6,2>(i*6, 0) += beta0 * gradBeta.row(0) + beta1 * gradBeta.row(1) + beta2 * gradBeta.row(2);
+        partialGradByCoeffs_.block<6,2>(i*6, 0) += beta0 * gradBeta.row(0) + beta1 * gradBeta.row(1) + beta2 * gradBeta.row(2);
       }
 
       else{
@@ -880,17 +881,17 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
     }
 
     // segment duration balance
-    if( pieceTime[i] < unoccupied_averageT * mean_time_lowBound_){
-      cost += penaltyWt.mean_time_weight * (pieceTime[i] - unoccupied_averageT * mean_time_lowBound_) * (pieceTime[i] - unoccupied_averageT * mean_time_lowBound_);
-      cost_meanT += penaltyWt.mean_time_weight * (pieceTime[i] - unoccupied_averageT * mean_time_lowBound_) * (pieceTime[i] - unoccupied_averageT * mean_time_lowBound_);
-      partialGradByTimes.array() += penaltyWt.mean_time_weight * 2.0 * (pieceTime[i] - unoccupied_averageT * mean_time_lowBound_)  * (- mean_time_lowBound_ / TrajNum_);
-      partialGradByTimes(i) += penaltyWt.mean_time_weight * 2.0 * (pieceTime[i] - unoccupied_averageT * mean_time_lowBound_);
+    if( pieceTime_[i] < unoccupied_averageT * mean_time_lowBound_){
+      cost += penaltyWt_.mean_time_weight * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_) * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_);
+      cost_meanT += penaltyWt_.mean_time_weight * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_) * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_);
+      partialGradByTimes_.array() += penaltyWt_.mean_time_weight * 2.0 * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_)  * (- mean_time_lowBound_ / TrajNum_);
+      partialGradByTimes_(i) += penaltyWt_.mean_time_weight * 2.0 * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_);
     }
-    if (pieceTime[i] > unoccupied_averageT * mean_time_uppBound_){
-      cost += penaltyWt.mean_time_weight * (pieceTime[i] - unoccupied_averageT * mean_time_uppBound_) * (pieceTime[i] - unoccupied_averageT * mean_time_uppBound_);
-      cost_meanT += penaltyWt.mean_time_weight * (pieceTime[i] - unoccupied_averageT * mean_time_uppBound_) * (pieceTime[i] - unoccupied_averageT * mean_time_uppBound_);
-      partialGradByTimes.array() += penaltyWt.mean_time_weight * 2.0 * (pieceTime[i] - unoccupied_averageT * mean_time_uppBound_) * (-mean_time_uppBound_ / TrajNum_);
-      partialGradByTimes(i) += penaltyWt.mean_time_weight * 2.0 * (pieceTime[i] - unoccupied_averageT * mean_time_uppBound_);
+    if (pieceTime_[i] > unoccupied_averageT * mean_time_uppBound_){
+      cost += penaltyWt_.mean_time_weight * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_) * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_);
+      cost_meanT += penaltyWt_.mean_time_weight * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_) * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_);
+      partialGradByTimes_.array() += penaltyWt_.mean_time_weight * 2.0 * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_) * (-mean_time_uppBound_ / TrajNum_);
+      partialGradByTimes_(i) += penaltyWt_.mean_time_weight * 2.0 * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_);
     }
 
     VecIntegralX.push_back(IntegralX);
@@ -938,13 +939,13 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
     Eigen::VectorXd CoeffX = VecCoeffChainX.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
     Eigen::VectorXd CoeffY = VecCoeffChainY.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
     
-    partialGradByCoeffs.block<6,1>(i*6, 1) += VecSingleXGradCS[i] * CoeffX;
-    partialGradByCoeffs.block<6,1>(i*6, 0) += VecSingleXGradCTheta[i] * CoeffX;
-    partialGradByCoeffs.block<6,1>(i*6, 1) += VecSingleYGradCS[i] * CoeffY;
-    partialGradByCoeffs.block<6,1>(i*6, 0) += VecSingleYGradCTheta[i] * CoeffY;
+    partialGradByCoeffs_.block<6,1>(i*6, 1) += VecSingleXGradCS[i] * CoeffX;
+    partialGradByCoeffs_.block<6,1>(i*6, 0) += VecSingleXGradCTheta[i] * CoeffX;
+    partialGradByCoeffs_.block<6,1>(i*6, 1) += VecSingleYGradCS[i] * CoeffY;
+    partialGradByCoeffs_.block<6,1>(i*6, 0) += VecSingleYGradCTheta[i] * CoeffY;
     ///////////////////////////////////////////////////////////////////////////
-    partialGradByTimes(i) += (VecSingleXGradT[i].cwiseProduct(CoeffX)).sum();
-    partialGradByTimes(i) += (VecSingleYGradT[i].cwiseProduct(CoeffY)).sum();
+    partialGradByTimes_(i) += (VecSingleXGradT[i].cwiseProduct(CoeffX)).sum();
+    partialGradByTimes_(i) += (VecSingleYGradT[i].cwiseProduct(CoeffY)).sum();
   }
 }
 
@@ -970,34 +971,34 @@ double MincoSmoother::costFunctionCallbackPath(void *ptr,
   Eigen::Map<const Eigen::VectorXd> t(x.data()+offset, obj.TrajNum_);
   Eigen::Map<Eigen::VectorXd> gradt(g.data()+offset, obj.TrajNum_);
   offset += obj.TrajNum_;
-  VirtualT2RealT(t, obj.pieceTime);
+  VirtualT2RealT(t, obj.pieceTime_);
   gradt.setZero();
   double cost;
   obj.minco_.setTConditions(obj.finState_);
-  obj.minco_.setParameters(obj.Innerpoints_,obj.pieceTime);
+  obj.minco_.setParameters(obj.Innerpoints_,obj.pieceTime_);
   obj.minco_.getEnergy(cost);
-  obj.minco_.getEnergyPartialGradByCoeffs(obj.partialGradByCoeffs);
-  obj.minco_.getEnergyPartialGradByTimes(obj.partialGradByTimes);
+  obj.minco_.getEnergyPartialGradByCoeffs(obj.partialGradByCoeffs_);
+  obj.minco_.getEnergyPartialGradByTimes(obj.partialGradByTimes_);
   obj.attachPenaltyFunctionalPath(cost);
-  obj.minco_.propogateArcYawLenghGrad(obj.partialGradByCoeffs, obj.partialGradByTimes,
-                                      obj.gradByPoints, obj.gradByTimes, obj.gradByTailStateS);
+  obj.minco_.propogateArcYawLenghGrad(obj.partialGradByCoeffs_, obj.partialGradByTimes_,
+                                      obj.gradByPoints, obj.gradByTimes_, obj.gradByTailStateS);
 
   *gradTailS = obj.gradByTailStateS.y();
 
-  cost += obj.PathpenaltyWt.time_weight * obj.pieceTime.sum();
+  cost += obj.PathpenaltyWt_.time_weight * obj.pieceTime_.sum();
 
   Eigen::VectorXd rhotimes;
-  rhotimes.resize(obj.gradByTimes.size());
-  obj.gradByTimes += obj.penaltyWt.time_weight * rhotimes.setOnes();
+  rhotimes.resize(obj.gradByTimes_.size());
+  obj.gradByTimes_ += obj.penaltyWt_.time_weight * rhotimes.setOnes();
   gradP = obj.gradByPoints;
-  backwardGradT(t, obj.gradByTimes, gradt);
+  backwardGradT(t, obj.gradByTimes_, gradt);
   
   return cost;
 }
 
 void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
-  double ini_x = iniStateXYTheta.x();
-  double ini_y = iniStateXYTheta.y();
+  double ini_x = iniStateXYTheta_.x();
+  double ini_y = iniStateXYTheta_.y();
 
   Eigen::Matrix<double, 6, 1> beta0, beta1, beta2, beta3;
   double s1, s2, s3, s4, s5;
@@ -1006,7 +1007,7 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
   double IntegralAlpha, omg;
 
   double unoccupied_averageT;
-  unoccupied_averageT = pieceTime.mean();
+  unoccupied_averageT = pieceTime_.mean();
   
   double violaPos;
 
@@ -1043,9 +1044,9 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
 
   for(int i=0; i<TrajNum_; i++){
     const Eigen::Matrix<double, 6, 2> &c = minco_.getCoeffs().block<6,2>(6*i, 0);
-    double step = pieceTime[i] / sparseResolution_;
+    double step = pieceTime_[i] / sparseResolution_;
     double halfstep = step / 2;
-    double CoeffIntegral = pieceTime[i] / sparseResolution_ / 6;
+    double CoeffIntegral = pieceTime_[i] / sparseResolution_ / 6;
     Eigen::MatrixXd SingleXGradCS(6,SamNumEachPart+1);
     Eigen::MatrixXd SingleXGradCTheta(6,SamNumEachPart+1);
     Eigen::VectorXd SingleXGradT(SamNumEachPart+1);
@@ -1127,11 +1128,11 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
           if(violaMom > 0){
             positiveSmoothedL1(violaMom, violaMomPena, violaMomPenaD);
             gradViolaMt = Alpha * (omg_sym * config_.max_vel_ * ddsigma.x() + config_.max_omega_ * ddsigma.y());
-            gradBeta(1,0) += omg * step * PathpenaltyWt.moment_weight * violaMomPenaD * omg_sym * config_.max_vel_;
-            gradBeta(1,1) += omg * step * PathpenaltyWt.moment_weight * violaMomPenaD * config_.max_omega_;
-            partialGradByTimes(i) += omg * PathpenaltyWt.moment_weight * (violaMomPenaD * gradViolaMt * step + violaMomPena / sparseResolution_);
-            cost += omg * step * PathpenaltyWt.moment_weight * violaMomPena;
-            cost_moment += omg * step * PathpenaltyWt.moment_weight * violaMomPena;
+            gradBeta(1,0) += omg * step * PathpenaltyWt_.moment_weight * violaMomPenaD * omg_sym * config_.max_vel_;
+            gradBeta(1,1) += omg * step * PathpenaltyWt_.moment_weight * violaMomPenaD * config_.max_omega_;
+            partialGradByTimes_(i) += omg * PathpenaltyWt_.moment_weight * (violaMomPenaD * gradViolaMt * step + violaMomPena / sparseResolution_);
+            cost += omg * step * PathpenaltyWt_.moment_weight * violaMomPena;
+            cost_moment += omg * step * PathpenaltyWt_.moment_weight * violaMomPena;
           }
         }
         for(int omg_sym = -1; omg_sym <= 1; omg_sym += 2){
@@ -1139,11 +1140,11 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
           if(violaMom > 0){
             positiveSmoothedL1(violaMom, violaMomPena, violaMomPenaD);
             gradViolaMt = Alpha * (omg_sym * -config_.min_vel_ * ddsigma.x() - config_.max_omega_ * ddsigma.y());
-            gradBeta(1,0) += omg * step * PathpenaltyWt.moment_weight * violaMomPenaD * omg_sym * -config_.min_vel_;
-            gradBeta(1,1) -= omg * step * PathpenaltyWt.moment_weight * violaMomPenaD * config_.max_omega_;
-            partialGradByTimes(i) += omg * PathpenaltyWt.moment_weight * (violaMomPenaD * gradViolaMt * step + violaMomPena / sparseResolution_);
-            cost += omg * step * PathpenaltyWt.moment_weight * violaMomPena;
-            cost_moment += omg * step * PathpenaltyWt.moment_weight * violaMomPena;
+            gradBeta(1,0) += omg * step * PathpenaltyWt_.moment_weight * violaMomPenaD * omg_sym * -config_.min_vel_;
+            gradBeta(1,1) -= omg * step * PathpenaltyWt_.moment_weight * violaMomPenaD * config_.max_omega_;
+            partialGradByTimes_(i) += omg * PathpenaltyWt_.moment_weight * (violaMomPenaD * gradViolaMt * step + violaMomPena / sparseResolution_);
+            cost += omg * step * PathpenaltyWt_.moment_weight * violaMomPena;
+            cost_moment += omg * step * PathpenaltyWt_.moment_weight * violaMomPena;
           }
         }
 
@@ -1153,21 +1154,21 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
         if(violaAcc > 0){
           positiveSmoothedL1(violaAcc, violaAccPena, violaAccPenaD);
           double gradViolaAT = 2.0 * Alpha * ddsigma.y() * dddsigma.y();
-          gradBeta(2,1) +=  omg * step * PathpenaltyWt.acc_weight * violaAccPenaD * 2.0 * ddsigma.y();
-          partialGradByTimes(i) += omg * PathpenaltyWt.acc_weight * (violaAccPenaD * gradViolaAT * step + violaAccPena / sparseResolution_);
-          cost += omg * step * PathpenaltyWt.acc_weight * violaAccPena;
-          cost_moment += omg * step * PathpenaltyWt.acc_weight * violaAccPena;
+          gradBeta(2,1) +=  omg * step * PathpenaltyWt_.acc_weight * violaAccPenaD * 2.0 * ddsigma.y();
+          partialGradByTimes_(i) += omg * PathpenaltyWt_.acc_weight * (violaAccPenaD * gradViolaAT * step + violaAccPena / sparseResolution_);
+          cost += omg * step * PathpenaltyWt_.acc_weight * violaAccPena;
+          cost_moment += omg * step * PathpenaltyWt_.acc_weight * violaAccPena;
         }
         if(violaAlp > 0){
           positiveSmoothedL1(violaAlp, violaAlpPena, violaAlpPenaD);
           double gradViolaDOT = 2.0 * Alpha * ddsigma.x() * dddsigma.x();
-          gradBeta(2,0) += omg * step * PathpenaltyWt.domega_weight * violaAlpPenaD * 2.0 * ddsigma.x();
-          partialGradByTimes(i) += omg * PathpenaltyWt.domega_weight * (violaAlpPenaD * gradViolaDOT * step + violaAlpPena / sparseResolution_);
-          cost += omg * step * PathpenaltyWt.domega_weight * violaAlpPena;
-          cost_moment += omg * step * PathpenaltyWt.domega_weight * violaAlpPena;
+          gradBeta(2,0) += omg * step * PathpenaltyWt_.domega_weight * violaAlpPenaD * 2.0 * ddsigma.x();
+          partialGradByTimes_(i) += omg * PathpenaltyWt_.domega_weight * (violaAlpPenaD * gradViolaDOT * step + violaAlpPena / sparseResolution_);
+          cost += omg * step * PathpenaltyWt_.domega_weight * violaAlpPena;
+          cost_moment += omg * step * PathpenaltyWt_.domega_weight * violaAlpPena;
         }
 
-        partialGradByCoeffs.block<6,2>(i*6, 0) += beta0 * gradBeta.row(0) + beta1 * gradBeta.row(1) + beta2 * gradBeta.row(2);
+        partialGradByCoeffs_.block<6,2>(i*6, 0) += beta0 * gradBeta.row(0) + beta1 * gradBeta.row(1) + beta2 * gradBeta.row(2);
       }
       else{
         s2 = s1 * s1;
@@ -1226,42 +1227,42 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
     VecSingleYGradCTheta[i] = SingleYGradCTheta * CoeffIntegral;
     VecSingleYGradT[i] = SingleYGradT;
 
-    if( pieceTime[i] < unoccupied_averageT * mean_time_lowBound_){
-      cost += PathpenaltyWt.mean_time_weight * (pieceTime[i] - unoccupied_averageT * mean_time_lowBound_) * (pieceTime[i] - unoccupied_averageT * mean_time_lowBound_);
-      cost_meanT += PathpenaltyWt.mean_time_weight * (pieceTime[i] - unoccupied_averageT * mean_time_lowBound_) * (pieceTime[i] - unoccupied_averageT * mean_time_lowBound_);
-      partialGradByTimes.array() += PathpenaltyWt.mean_time_weight * 2.0 * (pieceTime[i] - unoccupied_averageT * mean_time_lowBound_)  * (- mean_time_lowBound_ / TrajNum_);
-      partialGradByTimes(i) += PathpenaltyWt.mean_time_weight * 2.0 * (pieceTime[i] - unoccupied_averageT * mean_time_lowBound_);
+    if( pieceTime_[i] < unoccupied_averageT * mean_time_lowBound_){
+      cost += PathpenaltyWt_.mean_time_weight * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_) * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_);
+      cost_meanT += PathpenaltyWt_.mean_time_weight * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_) * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_);
+      partialGradByTimes_.array() += PathpenaltyWt_.mean_time_weight * 2.0 * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_)  * (- mean_time_lowBound_ / TrajNum_);
+      partialGradByTimes_(i) += PathpenaltyWt_.mean_time_weight * 2.0 * (pieceTime_[i] - unoccupied_averageT * mean_time_lowBound_);
     }
-    if (pieceTime[i] > unoccupied_averageT * mean_time_uppBound_){
-      cost += PathpenaltyWt.mean_time_weight * (pieceTime[i] - unoccupied_averageT * mean_time_uppBound_) * (pieceTime[i] - unoccupied_averageT * mean_time_uppBound_);
-      cost_meanT += PathpenaltyWt.mean_time_weight * (pieceTime[i] - unoccupied_averageT * mean_time_uppBound_) * (pieceTime[i] - unoccupied_averageT * mean_time_uppBound_);
-      partialGradByTimes.array() += PathpenaltyWt.mean_time_weight * 2.0 * (pieceTime[i] - unoccupied_averageT * mean_time_uppBound_)  * (- mean_time_uppBound_ / TrajNum_);
-      partialGradByTimes(i) += PathpenaltyWt.mean_time_weight * 2.0 * (pieceTime[i] - unoccupied_averageT * mean_time_uppBound_);
+    if (pieceTime_[i] > unoccupied_averageT * mean_time_uppBound_){
+      cost += PathpenaltyWt_.mean_time_weight * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_) * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_);
+      cost_meanT += PathpenaltyWt_.mean_time_weight * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_) * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_);
+      partialGradByTimes_.array() += PathpenaltyWt_.mean_time_weight * 2.0 * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_)  * (- mean_time_uppBound_ / TrajNum_);
+      partialGradByTimes_(i) += PathpenaltyWt_.mean_time_weight * 2.0 * (pieceTime_[i] - unoccupied_averageT * mean_time_uppBound_);
     }
 
     // Path point constraint
     Eigen::Vector2d innerpointXY = VecTrajFinalXY[i+1];
     violaPos = (innerpointXY - inner_init_positions[i].head(2)).squaredNorm();
-    VecCoeffChainX.head((i+1)*(SamNumEachPart+1)).array() += PathpenaltyWt.bigpath_sdf_weight * 2.0 * (innerpointXY.x() - inner_init_positions[i].x());
-    VecCoeffChainY.head((i+1)*(SamNumEachPart+1)).array() += PathpenaltyWt.bigpath_sdf_weight * 2.0 * (innerpointXY.y() - inner_init_positions[i].y());
-    cost += PathpenaltyWt.bigpath_sdf_weight * violaPos;
-    cost_bp += PathpenaltyWt.bigpath_sdf_weight * violaPos;
+    VecCoeffChainX.head((i+1)*(SamNumEachPart+1)).array() += PathpenaltyWt_.bigpath_sdf_weight * 2.0 * (innerpointXY.x() - inner_init_positions[i].x());
+    VecCoeffChainY.head((i+1)*(SamNumEachPart+1)).array() += PathpenaltyWt_.bigpath_sdf_weight * 2.0 * (innerpointXY.y() - inner_init_positions[i].y());
+    cost += PathpenaltyWt_.bigpath_sdf_weight * violaPos;
+    cost_bp += PathpenaltyWt_.bigpath_sdf_weight * violaPos;
   }
 
   if(ifprint){
-    ROS_INFO("cost: %f", cost);
-    ROS_INFO("cost big path dis: %f", cost_bp);
-    ROS_INFO("cost final p: %f", cost_final_p);
-    ROS_INFO("cost moment: %f", cost_moment);
+    RCLCPP_INFO(logger_, "cost: %f", cost);
+    RCLCPP_INFO(logger_, "cost big path dis: %f", cost_bp);
+    RCLCPP_INFO(logger_, "cost final p: %f", cost_final_p);
+    RCLCPP_INFO(logger_, "cost moment: %f", cost_moment);
   } 
 
   for(int i=0; i<TrajNum_; i++){
-    partialGradByCoeffs.block<6,1>(i*6, 1) += VecSingleXGradCS[i] * VecCoeffChainX.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
-    partialGradByCoeffs.block<6,1>(i*6, 0) += VecSingleXGradCTheta[i] * VecCoeffChainX.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
-    partialGradByCoeffs.block<6,1>(i*6, 1) += VecSingleYGradCS[i] * VecCoeffChainY.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
-    partialGradByCoeffs.block<6,1>(i*6, 0) += VecSingleYGradCTheta[i] * VecCoeffChainY.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
-    partialGradByTimes(i) += (VecSingleXGradT[i].cwiseProduct(VecCoeffChainX.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff))).sum();
-    partialGradByTimes(i) += (VecSingleYGradT[i].cwiseProduct(VecCoeffChainY.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff))).sum();
+    partialGradByCoeffs_.block<6,1>(i*6, 1) += VecSingleXGradCS[i] * VecCoeffChainX.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
+    partialGradByCoeffs_.block<6,1>(i*6, 0) += VecSingleXGradCTheta[i] * VecCoeffChainX.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
+    partialGradByCoeffs_.block<6,1>(i*6, 1) += VecSingleYGradCS[i] * VecCoeffChainY.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
+    partialGradByCoeffs_.block<6,1>(i*6, 0) += VecSingleYGradCTheta[i] * VecCoeffChainY.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff);
+    partialGradByTimes_(i) += (VecSingleXGradT[i].cwiseProduct(VecCoeffChainX.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff))).sum();
+    partialGradByTimes_(i) += (VecSingleYGradT[i].cwiseProduct(VecCoeffChainY.block(i*(SamNumEachPart+1),0,SamNumEachPart+1,1).cwiseProduct(IntegralChainCoeff))).sum();
   }
 }
 

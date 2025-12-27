@@ -28,6 +28,22 @@ namespace minco_smoother
 {
 
 /**
+ * @struct Config
+ * @brief Configuration kinematic constraints for MincoSmoother
+ */
+struct Config
+{
+    double max_vel_;
+    double min_vel_;
+    double max_acc_;
+    double max_omega_;
+    double max_domega_;
+    double max_centripetal_acc_;
+
+    bool if_directly_constrain_v_omega_;
+};
+
+/**
  * @class minco_smoother::minco_smoother
  * @brief use minco to optimize the path
  */
@@ -145,6 +161,9 @@ private:
   FlatTrajData flat_traj_;
   minco::Minco minco_;
 
+  Eigen::Vector3d ICR_;
+  bool if_standard_diff_;
+
   // Results
   Trajectory<7, 2> final_traj_;
   // Results before collision check
@@ -157,11 +176,10 @@ private:
   nav_msgs::msg::Path smoothed_path_; //result path
 
   //---parameters---
+  Config config_;
   double safe_dis_;
   double max_jps_dis_;
   double distance_weight_; double yaw_weight_;
-  double max_vel_; double max_acc_;
-  double max_omega_; double max_domega_;
   double sampletime_;
   int mintrajNum_;
 
