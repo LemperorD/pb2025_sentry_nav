@@ -79,15 +79,47 @@ std::shared_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub){
 }
 
 bool MincoSmoother::smooth(nav_msgs::msg::Path & path, const rclcpp::Duration & max_time){
+  if (path.poses.size() < 2) {
+    RCLCPP_WARN(logger_, "Path too short to smooth");
+    return false;
+  }
+
   start_pose_xytheta_ << path.poses.front().pose.position.x,
                          path.poses.front().pose.position.y,
                          tf2::getYaw(path.poses.front().pose.orientation);
   end_pose_xytheta_ << path.poses.back().pose.position.x,
                        path.poses.back().pose.position.y,
                        tf2::getYaw(path.poses.back().pose.orientation);
-
   flat_traj_ = getTrajDataFromPath(path);
-  minco_plan(flat_traj_);
+
+  if (!minco_plan(flat_traj_)) {
+    RCLCPP_WARN(logger_, "MINCO plan failed");
+    return false;
+  }
+
+  smoothed_path_.header = path.header;
+
+  double t = 0.0; double dt = sampletime_;
+
+  while (t <= optimizer_traj_.getTotalDuration()) {
+    Eigen::Vector2d pos = optimizer_traj_.getPos(t);
+    Eigen::Vector2d vel = optimizer_traj_.getVel(t);
+
+    geometry_msgs::msg::PoseStamped pose;
+    pose.header = path.header;
+    pose.pose.position.x = pos.x();
+    pose.pose.position.y = pos.y();
+
+    double yaw = std::atan2(vel.y(), vel.x());
+    tf2::Quaternion q;
+    q.setRPY(0, 0, yaw);
+    pose.pose.orientation = tf2::toMsg(q);
+
+    smoothed_path_.poses.push_back(pose);
+    t += dt;
+  }
+
+  path = smoothed_path_;
   return true;
 }
 
