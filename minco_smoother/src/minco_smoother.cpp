@@ -93,7 +93,7 @@ bool MincoSmoother::smooth(nav_msgs::msg::Path & path, const rclcpp::Duration & 
   flat_traj_ = getTrajDataFromPath(path);
 
   if (!minco_plan(flat_traj_)) {
-    RCLCPP_WARN(logger_, "MINCO plan failed");
+    RCLCPP_WARN(logger_, "MINCO smoother failed");
     return false;
   }
 
@@ -324,13 +324,13 @@ bool MincoSmoother::optimizer(){
   // 2*(N-1) intermediate points, 1 relaxed S, N times
   int variable_num_ = 3 * TrajNum_ - 1;
 
-  // ROS_INFO_STREAM(logger_, "iniStates: \n" << iniState_);
-  // ROS_INFO_STREAM(logger_, "finStates: \n" << finState_);
-  // ROS_INFO(logger_, "TrajNum: %d", TrajNum_);
+  // RCLCPP_INFO_STREAM(logger_, "iniStates: \n" << iniState_);
+  // RCLCPP_INFO_STREAM(logger_, "finStates: \n" << finState_);
+  // RCLCPP_INFO(logger_, "TrajNum: %d", TrajNum_);
 
   minco_.setConditions(iniState_, finState_, TrajNum_, energyWeights_);
-  // ROS_INFO_STREAM(logger_, "init Innerpoints: \n" << Innerpoints_);
-  // ROS_INFO_STREAM(logger_, "init pieceTime_: " << pieceTime_.transpose());
+  // RCLCPP_INFO_STREAM(logger_, "init Innerpoints: \n" << Innerpoints_);
+  // RCLCPP_INFO_STREAM(logger_, "init pieceTime_: " << pieceTime_.transpose());
   minco_.setParameters(Innerpoints_, pieceTime_);   
   minco_.getTrajectory(init_final_traj_);
   Eigen::VectorXd x;
@@ -598,8 +598,8 @@ double MincoSmoother::costFunctionCallback(void *ptr,
   }
   obj.minco_.propogateArcYawLenghGrad(obj.partialGradByCoeffs_, obj.partialGradByTimes_,
                                       obj.gradByPoints_, obj.gradByTimes_, obj.gradByTailStateS_);
-
   cost += obj.penaltyWt_.time_weight * obj.pieceTime_.sum();
+
   if(obj.ifprint){
     RCLCPP_INFO(logger_, "T cost: %f", obj.penaltyWt_.time_weight * obj.pieceTime_.sum());
   }
