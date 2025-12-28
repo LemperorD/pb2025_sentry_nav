@@ -56,14 +56,15 @@ private:
   void localPlanCallback(const nav_msgs::msg::Path::ConstSharedPtr & msg);
   void cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
   void cmdSpinCallback(example_interfaces::msg::Float32::SharedPtr msg);
-  void chassisStateCallback(example_interfaces::msg::UInt8::SharedPtr msg);
+  void chassisModeCallback(example_interfaces::msg::UInt8::SharedPtr msg);
+  void updateGimbalYaw();
   void publishTransform();
   geometry_msgs::msg::Twist transformVelocity(
     const geometry_msgs::msg::Twist::SharedPtr & twist, float yaw_diff);
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
   rclcpp::Subscription<example_interfaces::msg::Float32>::SharedPtr cmd_spin_sub_;
-  rclcpp::Subscription<example_interfaces::msg::UInt8>::SharedPtr chassis_state_sub_;
+  rclcpp::Subscription<example_interfaces::msg::UInt8>::SharedPtr chassis_mode_sub_;
 
   message_filters::Subscriber<nav_msgs::msg::Odometry> odom_sub_filter_;
   message_filters::Subscriber<nav_msgs::msg::Path> local_plan_sub_filter_;
@@ -75,7 +76,9 @@ private:
 
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
-  rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::TimerBase::SharedPtr tf_sub_timer_;
+  rclcpp::TimerBase::SharedPtr tf_pub_timer_;
+
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   std::string robot_base_frame_;
@@ -86,15 +89,13 @@ private:
   std::string cmd_spin_topic_;
   std::string input_cmd_vel_topic_;
   std::string output_cmd_vel_topic_;
-  std::string chassis_state_topic_;
+  std::string chassis_mode_topic_;
   float spin_speed_;
   uint8_t chassis_mode_=2;
   double chassis_followed_yaw_=0.0;
 
   std::mutex cmd_vel_mutex_;
-  std::mutex tf_mutex_;
   geometry_msgs::msg::Twist::SharedPtr latest_cmd_vel_;
-  geometry_msgs::msg::TransformStamped tf_chassis_to_gimbal_yaw_;
   double current_robot_base_angle_;
   rclcpp::Time last_controller_activate_time_;
 };
