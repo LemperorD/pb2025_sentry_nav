@@ -37,11 +37,10 @@ void MincoSmoother::deactivate(){
   RCLCPP_INFO(logger_, "Deactivating minco_ Smoother");
 }
 
-void MincoSmoother::configure(
-const rclcpp_lifecycle::LifecycleNode::WeakPtr & parent,
-std::string name, std::shared_ptr<tf2_ros::Buffer> tf,
-std::shared_ptr<nav2_costmap_2d::CostmapSubscriber> costmap_sub,
-std::shared_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub){
+void MincoSmoother::configure(const rclcpp_lifecycle::LifecycleNode::WeakPtr & parent,
+                              std::string name, std::shared_ptr<tf2_ros::Buffer> tf,
+                              std::shared_ptr<nav2_costmap_2d::CostmapSubscriber> costmap_sub,
+                              std::shared_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub){
   auto node = parent.lock();
   node_ = parent;
   if (!node) { throw nav2_core::PlannerException("Unable to lock node!"); }
@@ -76,6 +75,14 @@ std::shared_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub){
   node->get_parameter(plugin_name_ + ".yaw_weight", yaw_weight_);
   node->get_parameter(plugin_name_ + ".min_traj_num", mintrajNum_);
   node->get_parameter(plugin_name_ + ".sample_time", sampletime_);
+
+  SamNumEachPart_ = 2 * sparseResolution_;
+  sparseResolution_6_ = sparseResolution_ * 6;
+  IntegralChainCoeff_.resize(SamNumEachPart_ + 1);
+  IntegralChainCoeff_.setZero();
+  for(int i=0; i<sparseResolution_; i++){
+    IntegralChainCoeff_.block(2*i,0,3,1) += Eigen::Vector3d(1.0, 4.0, 1.0);
+  }
 }
 
 bool MincoSmoother::smooth(nav_msgs::msg::Path & path, const rclcpp::Duration & max_time){
@@ -752,7 +759,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
         violaAlp = ddsigma.x()*ddsigma.x() - config_.max_domega_ * config_.max_domega_;
 
         if(violaAcc > 0){
-          positiveSmoothedL1(violaAcc, violaAccPena, violaAccPenaD);
+          positiveSmoothedL1(smoothEps_, violaAcc, violaAccPena, violaAccPenaD);
           gradViolaAT = 2.0 * Alpha * ddsigma.y() * dddsigma.y();
           gradBeta(2,1) +=  omgstep * penaltyWt_.acc_weight * violaAccPenaD * 2.0 * ddsigma.y();
           partialGradByTimes_(i) += omg * penaltyWt_.acc_weight * (violaAccPenaD * gradViolaAT * step + violaAccPena / sparseResolution_);
@@ -760,7 +767,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
           cost_a += omgstep * penaltyWt_.acc_weight * violaAccPena;
         }
         if(violaAlp > 0){
-          positiveSmoothedL1(violaAlp, violaAlpPena, violaAlpPenaD);
+          positiveSmoothedL1(smoothEps_, violaAlp, violaAlpPena, violaAlpPenaD);
           gradViolaDOT = 2.0 * Alpha * ddsigma.x() * dddsigma.x();
           gradBeta(2,0) += omgstep * penaltyWt_.domega_weight * violaAlpPenaD * 2.0 * ddsigma.x();
           partialGradByTimes_(i) += omg * penaltyWt_.domega_weight * (violaAlpPenaD * gradViolaDOT * step + violaAlpPena / sparseResolution_);
@@ -772,7 +779,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
           // Directly constrain velocity and angular velocity
           violaVel = dsigma.y() * dsigma.y() - config_.max_vel_ * config_.max_vel_;
           if(violaVel > 0){
-            positiveSmoothedL1(violaVel, violaVelPena, violaVelPenaD);
+            positiveSmoothedL1(smoothEps_, violaVel, violaVelPena, violaVelPenaD);
             gradViolaPt = 2.0 * Alpha * dsigma.y()
                             * ddsigma.y();
             gradBeta(1,1) += omgstep * penaltyWt_.moment_weight * violaVelPenaD * 2.0 * dsigma.y();
@@ -782,7 +789,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
           }
           violaOmega = dsigma.x() * dsigma.x() - config_.max_omega_ * config_.max_omega_;
           if(violaOmega > 0){
-            positiveSmoothedL1(violaOmega, violaOmegaPena, violaOmegaPenaD);
+            positiveSmoothedL1(smoothEps_, violaOmega, violaOmegaPena, violaOmegaPenaD);
             gradViolaPt = 2.0 * Alpha * dsigma.x()
                             * ddsigma.x();
             gradBeta(1,0) += omgstep * penaltyWt_.moment_weight * violaOmegaPenaD * 2.0 * dsigma.x();
@@ -797,7 +804,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
           for(int omg_sym = -1; omg_sym <= 1; omg_sym += 2){
             violaMom = omg_sym * config_.max_vel_ * dsigma.x() + config_.max_omega_ * dsigma.y() - config_.max_vel_ * config_.max_omega_;
             if(violaMom > 0){
-              positiveSmoothedL1(violaMom, violaMomPena, violaMomPenaD);
+              positiveSmoothedL1(smoothEps_, violaMom, violaMomPena, violaMomPenaD);
               gradViolaMt = Alpha * (omg_sym * config_.max_vel_ * ddsigma.x() + config_.max_omega_ * ddsigma.y());
               gradBeta(1,0) += omgstep * penaltyWt_.moment_weight * violaMomPenaD * omg_sym * config_.max_vel_;
               gradBeta(1,1) += omgstep * penaltyWt_.moment_weight * violaMomPenaD * config_.max_omega_;
@@ -809,7 +816,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
           for(int omg_sym = -1; omg_sym <= 1; omg_sym += 2){
             violaMom = omg_sym * -config_.min_vel_ * dsigma.x() - config_.max_omega_ * dsigma.y() + config_.min_vel_ * config_.max_omega_;
             if(violaMom > 0){
-              positiveSmoothedL1(violaMom, violaMomPena, violaMomPenaD);
+              positiveSmoothedL1(smoothEps_, violaMom, violaMomPena, violaMomPenaD);
               gradViolaMt = Alpha * (omg_sym * -config_.min_vel_ * ddsigma.x() - config_.max_omega_ * ddsigma.y());
               gradBeta(1,0) += omgstep * penaltyWt_.moment_weight * violaMomPenaD * omg_sym * -config_.min_vel_;
               gradBeta(1,1) -= omgstep * penaltyWt_.moment_weight * violaMomPenaD * config_.max_omega_;
@@ -822,7 +829,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
         // Anti-skid or anti-rollover constraint
         violaCenAcc = dsigma.x()*dsigma.x()*dsigma.y()*dsigma.y() - config_.max_centripetal_acc_*config_.max_centripetal_acc_;
         if(violaCenAcc > 0){
-          positiveSmoothedL1(violaCenAcc, violaCenAccPena, violaCenAccPenaD);
+          positiveSmoothedL1(smoothEps_, violaCenAcc, violaCenAccPena, violaCenAccPenaD);
           gradViolaCAt = 2.0 * Alpha * (dsigma.x() * dsigma.y() * dsigma.y() * ddsigma.x() + dsigma.y() * dsigma.x() * dsigma.x() * ddsigma.y());
           gradBeta(1,0) += omgstep * penaltyWt_.cen_acc_weight * violaCenAccPenaD * (2 * dsigma.x() * dsigma.y() * dsigma.y());
           gradBeta(1,1) += omgstep * penaltyWt_.cen_acc_weight * violaCenAccPenaD * (2 * dsigma.x() * dsigma.x() * dsigma.y());
@@ -837,7 +844,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
         Eigen::Matrix2d ego_R;
         ego_R << cosyaw,-sinyaw, sinyaw, cosyaw;
 
-        bool if_coolision = false;
+        bool if_collision = false;
         Eigen::Vector2d all_grad2Pos; all_grad2Pos.setZero();
 
 
@@ -846,8 +853,8 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
           double sdf_value = map_->getDistWithGradBilinear(bpt, gradESDF2d, safeDis);
           violaPos = -sdf_value + safeDis;
           if (violaPos > 0.0){
-            if_coolision = true;
-            positiveSmoothedL1(violaPos, violaPosPena, violaPosPenaD);
+            if_collision = true;
+            positiveSmoothedL1(smoothEps_, violaPos, violaPosPena, violaPosPenaD);
             all_grad2Pos -= omgstep * penaltyWt_.collision_weight * violaPosPenaD * gradESDF2d;
             help_L << -sinyaw, -cosyaw, cosyaw, -sinyaw;
             gradViolaPt = -Alpha * dsigma.x() * gradESDF2d.transpose() * help_L * cp2D;
@@ -858,7 +865,7 @@ void MincoSmoother::attachPenaltyFunctional(double &cost){
             cost_corrb += omgstep * penaltyWt_.collision_weight * violaPosPena;
           }
         }
-        if(if_coolision){
+        if(if_collision){
           VecCoeffChainX.head(i*(SamNumEachPart_+1)+j+1).array() += all_grad2Pos.x();
           VecCoeffChainY.head(i*(SamNumEachPart_+1)+j+1).array() += all_grad2Pos.y();
         }
@@ -1158,7 +1165,7 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
         for(int omg_sym = -1; omg_sym <= 1; omg_sym += 2){
           violaMom = omg_sym * config_.max_vel_ * dsigma.x() + config_.max_omega_ * dsigma.y() - config_.max_vel_ * config_.max_omega_;
           if(violaMom > 0){
-            positiveSmoothedL1(violaMom, violaMomPena, violaMomPenaD);
+            positiveSmoothedL1(smoothEps_, violaMom, violaMomPena, violaMomPenaD);
             gradViolaMt = Alpha * (omg_sym * config_.max_vel_ * ddsigma.x() + config_.max_omega_ * ddsigma.y());
             gradBeta(1,0) += omg * step * PathpenaltyWt_.moment_weight * violaMomPenaD * omg_sym * config_.max_vel_;
             gradBeta(1,1) += omg * step * PathpenaltyWt_.moment_weight * violaMomPenaD * config_.max_omega_;
@@ -1170,7 +1177,7 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
         for(int omg_sym = -1; omg_sym <= 1; omg_sym += 2){
           violaMom = omg_sym * -config_.min_vel_ * dsigma.x() - config_.max_omega_ * dsigma.y() + config_.min_vel_ * config_.max_omega_;
           if(violaMom > 0){
-            positiveSmoothedL1(violaMom, violaMomPena, violaMomPenaD);
+            positiveSmoothedL1(smoothEps_, violaMom, violaMomPena, violaMomPenaD);
             gradViolaMt = Alpha * (omg_sym * -config_.min_vel_ * ddsigma.x() - config_.max_omega_ * ddsigma.y());
             gradBeta(1,0) += omg * step * PathpenaltyWt_.moment_weight * violaMomPenaD * omg_sym * -config_.min_vel_;
             gradBeta(1,1) -= omg * step * PathpenaltyWt_.moment_weight * violaMomPenaD * config_.max_omega_;
@@ -1184,7 +1191,7 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
         double violaAlp = ddsigma.x()*ddsigma.x() - config_.max_domega_*config_.max_domega_;
         double violaAccPena, violaAccPenaD, violaAlpPena, violaAlpPenaD;
         if(violaAcc > 0){
-          positiveSmoothedL1(violaAcc, violaAccPena, violaAccPenaD);
+          positiveSmoothedL1(smoothEps_, violaAcc, violaAccPena, violaAccPenaD);
           double gradViolaAT = 2.0 * Alpha * ddsigma.y() * dddsigma.y();
           gradBeta(2,1) +=  omg * step * PathpenaltyWt_.acc_weight * violaAccPenaD * 2.0 * ddsigma.y();
           partialGradByTimes_(i) += omg * PathpenaltyWt_.acc_weight * (violaAccPenaD * gradViolaAT * step + violaAccPena / sparseResolution_);
@@ -1192,7 +1199,7 @@ void MincoSmoother::attachPenaltyFunctionalPath(double &cost){
           cost_moment += omg * step * PathpenaltyWt_.acc_weight * violaAccPena;
         }
         if(violaAlp > 0){
-          positiveSmoothedL1(violaAlp, violaAlpPena, violaAlpPenaD);
+          positiveSmoothedL1(smoothEps_, violaAlp, violaAlpPena, violaAlpPenaD);
           double gradViolaDOT = 2.0 * Alpha * ddsigma.x() * dddsigma.x();
           gradBeta(2,0) += omg * step * PathpenaltyWt_.domega_weight * violaAlpPenaD * 2.0 * ddsigma.x();
           partialGradByTimes_(i) += omg * PathpenaltyWt_.domega_weight * (violaAlpPenaD * gradViolaDOT * step + violaAlpPena / sparseResolution_);
