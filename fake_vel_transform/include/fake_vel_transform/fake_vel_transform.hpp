@@ -20,7 +20,7 @@
 #include <string>
 
 #include "example_interfaces/msg/float32.hpp"
-#include "example_interfaces/msg/u_int8.hpp"
+#include "std_msgs/msg/u_int8.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "message_filters/subscriber.h"
 #include "message_filters/sync_policies/approximate_time.h"
@@ -56,7 +56,7 @@ private:
   void localPlanCallback(const nav_msgs::msg::Path::ConstSharedPtr & msg);
   void cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
   void cmdSpinCallback(example_interfaces::msg::Float32::SharedPtr msg);
-  void chassisModeCallback(example_interfaces::msg::UInt8::SharedPtr msg);
+  void chassisModeCallback(std_msgs::msg::UInt8::SharedPtr msg);
   void updateGimbalYaw();
   void publishTransform();
   geometry_msgs::msg::Twist transformVelocity(
@@ -64,7 +64,7 @@ private:
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
   rclcpp::Subscription<example_interfaces::msg::Float32>::SharedPtr cmd_spin_sub_;
-  rclcpp::Subscription<example_interfaces::msg::UInt8>::SharedPtr chassis_mode_sub_;
+  rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr chassis_mode_sub_;
 
   message_filters::Subscriber<nav_msgs::msg::Odometry> odom_sub_filter_;
   message_filters::Subscriber<nav_msgs::msg::Path> local_plan_sub_filter_;

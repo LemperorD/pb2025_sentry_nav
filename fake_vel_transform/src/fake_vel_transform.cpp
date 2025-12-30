@@ -63,7 +63,7 @@ FakeVelTransform::FakeVelTransform(const rclcpp::NodeOptions & options)
     input_cmd_vel_topic_, 10,
     std::bind(&FakeVelTransform::cmdVelCallback, this, std::placeholders::_1));
 
-  chassis_mode_sub_ = this->create_subscription<example_interfaces::msg::UInt8>(
+  chassis_mode_sub_ = this->create_subscription<std_msgs::msg::UInt8>(
     chassis_mode_topic_, 1, std::bind(&FakeVelTransform::chassisModeCallback, this, std::placeholders::_1));
 
   odom_sub_filter_.subscribe(this, odom_topic_);
@@ -89,7 +89,7 @@ FakeVelTransform::FakeVelTransform(const rclcpp::NodeOptions & options)
     std::chrono::milliseconds(20), std::bind(&FakeVelTransform::publishTransform, this));
 }
 
-void FakeVelTransform::chassisModeCallback(const example_interfaces::msg::UInt8::SharedPtr msg)
+void FakeVelTransform::chassisModeCallback(const std_msgs::msg::UInt8::SharedPtr msg)
 {
   chassis_mode_ = msg->data;
 }
