@@ -119,7 +119,8 @@ def generate_launch_description():
 
     declare_use_robot_state_pub_cmd = DeclareLaunchArgument(
         "use_robot_state_pub",
-        default_value="False",
+        # default_value="False",
+        default_value="True",
         description="Whether to start the robot state publisher",
     )
 
@@ -130,7 +131,8 @@ def generate_launch_description():
     )
 
     declare_use_rviz_cmd = DeclareLaunchArgument(
-        "use_rviz", default_value="True", description="Whether to start RVIZ"
+        # "use_rviz", default_value="True", description="Whether to start RVIZ"
+        "use_rviz", default_value="False", description="Whether to start RVIZ"
     )
 
     # Create our own temporary YAML files that include substitutions
@@ -147,7 +149,7 @@ def generate_launch_description():
 
     start_robot_state_publisher_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(launch_dir, "robot_state_publisher_launch.py")
+            os.path.join(launch_dir, "buaa_sentry_publisher_launch.py")
         ),
         # NOTE: This startup file is only used when the navigation module is standalone
         condition=IfCondition(use_robot_state_pub),

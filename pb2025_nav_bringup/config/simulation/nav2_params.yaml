@@ -155,6 +155,8 @@ fake_vel_transform:
     input_cmd_vel_topic: "cmd_vel_nav2_result"
     output_cmd_vel_topic: "cmd_vel"
     cmd_spin_topic: "cmd_spin"
+    chassis_mode_topic: "chassis_mode"
+    chassis_frame: "chassis"
     init_spin_speed: 3.14
 
 small_gicp_relocalization:
