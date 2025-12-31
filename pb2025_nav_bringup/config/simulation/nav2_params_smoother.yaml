@@ -379,13 +379,13 @@ controller_server:
       yaw_goal_tolerance: 6.28
     FollowPath:
       plugin: "pb_omni_pid_pursuit_controller::OmniPidPursuitController"
-      translation_kp: 3.0
-      translation_ki: 0.1
+      translation_kp: 1.5
+      translation_ki: 0.0
       translation_kd: 0.3
       enable_rotation: false
       # enable_rotation: true
-      rotation_kp: 3.0
-      rotation_ki: 0.1
+      rotation_kp: 1.0
+      rotation_ki: 0.0
       rotation_kd: 0.3
       transform_tolerance: 0.1
       min_max_sum_error: 1.0
@@ -394,9 +394,9 @@ controller_server:
       lookahead_time: 1.0
       min_lookahead_dist: 0.5
       max_lookahead_dist: 1.0
-      use_interpolation: false
+      use_interpolation: true
       use_rotate_to_heading: false
-      use_rotate_to_heading_treshold: 0.1
+      use_rotate_to_heading_treshold: 0.0
       # use_rotate_to_heading: true
       # use_rotate_to_heading_treshold: 0.0
       min_approach_linear_velocity: 0.5

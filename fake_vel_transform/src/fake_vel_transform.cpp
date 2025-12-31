@@ -193,15 +193,13 @@ void FakeVelTransform::publishTransform()
 }
 
 geometry_msgs::msg::Twist FakeVelTransform::transformVelocity( const geometry_msgs::msg::Twist::SharedPtr & twist, float yaw_diff) { 
-  geometry_msgs::msg::Twist out; 
+  geometry_msgs::msg::Twist out;
+  out.linear.x = twist->linear.x * cos(yaw_diff) + twist->linear.y * sin(yaw_diff); 
+  out.linear.y = -twist->linear.x * sin(yaw_diff) + twist->linear.y * cos(yaw_diff);
   if(chassis_mode_ == chassisFollowed){  
-    out.linear.x = twist->linear.x; 
-    out.linear.y = twist->linear.y; 
     out.angular.z = twist->angular.z; 
   } 
   else{
-    out.linear.x = twist->linear.x * cos(yaw_diff) + twist->linear.y * sin(yaw_diff); 
-    out.linear.y = -twist->linear.x * sin(yaw_diff) + twist->linear.y * cos(yaw_diff); 
     out.angular.z = twist->angular.z + spin_speed_;
   } 
   return out; 
