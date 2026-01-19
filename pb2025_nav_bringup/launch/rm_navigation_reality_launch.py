@@ -20,7 +20,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, TextSubstitution
+from launch.substitutions import LaunchConfiguration, TextSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterFile
 from nav2_common.launch import RewrittenYaml
@@ -119,7 +119,7 @@ def generate_launch_description():
 
     declare_use_robot_state_pub_cmd = DeclareLaunchArgument(
         "use_robot_state_pub",
-        # default_value="False",
+        # default_value="False", # disable robot_state_publisher when using reality
         default_value="True",
         description="Whether to start the robot state publisher",
     )
@@ -153,6 +153,19 @@ def generate_launch_description():
         ),
         # NOTE: This startup file is only used when the navigation module is standalone
         condition=IfCondition(use_robot_state_pub),
+        launch_arguments={
+            "namespace": namespace,
+            "use_sim_time": use_sim_time,
+        }.items(),
+    )
+
+    # When not using robot state publisher, start static TF publisher
+    start_static_tf_publisher_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(launch_dir, "static_tf_publisher_launch.py")
+        ),
+        # NOTE: This startup file is only used when the navigation module is standalone
+        condition=IfCondition(PythonExpression(["not ", use_robot_state_pub])),
         launch_arguments={
             "namespace": namespace,
             "use_sim_time": use_sim_time,
@@ -221,6 +234,7 @@ def generate_launch_description():
 
     # Add the actions to launch all of the navigation nodes
     ld.add_action(start_robot_state_publisher_cmd)
+    ld.add_action(start_static_tf_publisher_cmd)
     ld.add_action(start_livox_ros_driver2_node)
     ld.add_action(bringup_cmd)
     ld.add_action(joy_teleop_cmd)
