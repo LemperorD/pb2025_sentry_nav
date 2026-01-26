@@ -1,26 +1,12 @@
-// Copyright 2025 Lihan Chen
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-#include "loam_interface/loam_interface.hpp"
+#include "loam_interface_gravity/loam_interface_gravity.hpp"
 
 #include "pcl_ros/transforms.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 
-namespace loam_interface
+namespace loam_interface_g
 {
 
-LoamInterfaceNode::LoamInterfaceNode(const rclcpp::NodeOptions & options)
+LoamInterfaceGNode::LoamInterfaceGNode(const rclcpp::NodeOptions & options)
 : Node("loam_interface", options)
 {
   this->declare_parameter<std::string>("state_estimation_topic", "");
@@ -45,13 +31,13 @@ LoamInterfaceNode::LoamInterfaceNode(const rclcpp::NodeOptions & options)
 
   pcd_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
     registered_scan_topic_, 5,
-    std::bind(&LoamInterfaceNode::pointCloudCallback, this, std::placeholders::_1));
+    std::bind(&LoamInterfaceGNode::pointCloudCallback, this, std::placeholders::_1));
   odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
     state_estimation_topic_, 5,
-    std::bind(&LoamInterfaceNode::odometryCallback, this, std::placeholders::_1));
+    std::bind(&LoamInterfaceGNode::odometryCallback, this, std::placeholders::_1));
 }
 
-void LoamInterfaceNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg)
+void LoamInterfaceGNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg)
 {
   // NOTE: Input point cloud message is based on the `lidar_odom`
   // Here we transform it to the REAL `odom` frame
@@ -60,7 +46,7 @@ void LoamInterfaceNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::
   pcd_pub_->publish(*out);
 }
 
-void LoamInterfaceNode::odometryCallback(const nav_msgs::msg::Odometry::ConstSharedPtr msg)
+void LoamInterfaceGNode::odometryCallback(const nav_msgs::msg::Odometry::ConstSharedPtr msg)
 {
   // NOTE: Input odometry message is based on the `lidar_odom`
   // Here we transform it to the `odom` frame
@@ -101,4 +87,4 @@ void LoamInterfaceNode::odometryCallback(const nav_msgs::msg::Odometry::ConstSha
 
 #include "rclcpp_components/register_node_macro.hpp"
 
-RCLCPP_COMPONENTS_REGISTER_NODE(loam_interface::LoamInterfaceNode)
+RCLCPP_COMPONENTS_REGISTER_NODE(loam_interface_g::LoamInterfaceGNode)
