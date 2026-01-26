@@ -56,7 +56,10 @@ void LoamInterfaceGNode::odometryCallback(const nav_msgs::msg::Odometry::ConstSh
         base_frame_, lidar_frame_, msg->header.stamp, rclcpp::Duration::from_seconds(0.5));
       tf2::Transform tf_base_frame_to_lidar;
       tf2::fromMsg(tf_stamped.transform, tf_base_frame_to_lidar);
-      tf_odom_to_lidar_odom_ = tf_base_frame_to_lidar;
+      
+      // 使用tf_base_frame_to_lidar
+      tf_odom_to_lidar_odom_ = gravityAlign(tf_base_frame_to_lidar);
+
       base_frame_to_lidar_initialized_ = true;
     } catch (tf2::TransformException & ex) {
       RCLCPP_WARN(this->get_logger(), "TF lookup failed: %s Retrying...", ex.what());
@@ -81,6 +84,20 @@ void LoamInterfaceGNode::odometryCallback(const nav_msgs::msg::Odometry::ConstSh
   out.pose.pose.orientation = tf2::toMsg(tf_odom_to_lidar.getRotation());
 
   odom_pub_->publish(out);
+}
+
+inline tf2::Transform LoamInterfaceGNode::gravityAlign(tf2::Transform tf_notALign){
+  double roll, pitch, yaw;
+  tf2::Matrix3x3(tf_notALign.getRotation()).getRPY(roll, pitch, yaw);
+
+  tf2::Quaternion q;
+  q.setRPY(0.0, 0.0, yaw);
+  q.normalize();
+
+  tf2::Transform tf_align = tf_notALign;
+  tf_align.setRotation(q);
+
+  return tf_align;
 }
 
 }  // namespace loam_interface

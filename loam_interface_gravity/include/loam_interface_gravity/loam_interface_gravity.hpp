@@ -18,6 +18,9 @@ public:
   explicit LoamInterfaceGNode(const rclcpp::NodeOptions & options);
 
 private:
+  inline tf2::Transform gravityAlign(tf2::Transform tf_notAlign);
+
+private:
   void pointCloudCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg);
 
   void odometryCallback(const nav_msgs::msg::Odometry::ConstSharedPtr msg);
