@@ -14,6 +14,7 @@
 
 
 import os
+import math
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -89,7 +90,7 @@ def generate_launch_description():
     start_static_transform_node1 = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
-        name="static_transform_publisher_map2odom",
+        name="static_transform_publisher_node1",
         output="screen",
         arguments=[
             "--x",
@@ -115,7 +116,7 @@ def generate_launch_description():
     start_static_transform_node2 = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
-        name="static_transform_publisher_map2odom",
+        name="static_transform_publisher_node2",
         output="screen",
         arguments=[
             "--x",
@@ -141,7 +142,7 @@ def generate_launch_description():
     start_static_transform_node3 = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
-        name="static_transform_publisher_map2odom",
+        name="static_transform_publisher_node3",
         output="screen",
         arguments=[
             "--x",
@@ -151,11 +152,11 @@ def generate_launch_description():
             "--z",
             "0.107",
             "--roll",
-            "${-pi/18}",
+            str(-math.pi/18),
             "--pitch",
             "0.0",
             "--yaw",
-            "${-pi/2}",
+            str(-math.pi/18),
             "--frame-id",
             "chassis",
             "--child-frame-id",
@@ -167,7 +168,7 @@ def generate_launch_description():
     start_static_transform_node4 = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
-        name="static_transform_publisher_map2odom",
+        name="static_transform_publisher_node4",
         output="screen",
         arguments=[
             "--x",
@@ -193,7 +194,7 @@ def generate_launch_description():
     start_static_transform_node5 = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
-        name="static_transform_publisher_map2odom",
+        name="static_transform_publisher_node5",
         output="screen",
         arguments=[
             "--x",
