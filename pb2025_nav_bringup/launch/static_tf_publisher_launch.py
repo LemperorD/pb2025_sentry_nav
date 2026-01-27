@@ -156,7 +156,7 @@ def generate_launch_description():
             "--pitch",
             "0.0",
             "--yaw",
-            str(-math.pi/18),
+            str(-math.pi/2),
             "--frame-id",
             "chassis",
             "--child-frame-id",
