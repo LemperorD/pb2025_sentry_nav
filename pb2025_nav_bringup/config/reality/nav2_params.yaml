@@ -155,7 +155,6 @@ fake_vel_transform:
     use_sim_time: False
     odom_topic: "odometry"
     robot_base_frame: "gimbal_yaw"
-    # fake_robot_base_frame: "gimbal_yaw"
     fake_robot_base_frame: "gimbal_yaw_fake"
     input_cmd_vel_topic: "cmd_vel_nav2_result"
     output_cmd_vel_topic: "cmd_vel"
@@ -359,7 +358,7 @@ controller_server:
       translation_ki: 0.1
       translation_kd: 0.3
       enable_rotation: false
-      rotation_kp: 1.5
+      rotation_kp: 1.0
       rotation_ki: 0.01
       rotation_kd: 0.1
       transform_tolerance: 0.1
