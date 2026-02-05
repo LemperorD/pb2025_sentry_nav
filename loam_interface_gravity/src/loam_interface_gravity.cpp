@@ -11,17 +11,23 @@ LoamInterfaceGNode::LoamInterfaceGNode(const rclcpp::NodeOptions & options)
 {
   this->declare_parameter<std::string>("state_estimation_topic", "");
   this->declare_parameter<std::string>("registered_scan_topic", "");
+  this->declare_parameter<std::string>("imu_topic", "livox/imu");
   this->declare_parameter<std::string>("odom_frame", "odom");
+  this->declare_parameter<std::string>("base_frame", "");
+  this->declare_parameter<std::string>("lidar_frame", "");
+
   this->declare_parameter<std::string>("base_frame", "");
   this->declare_parameter<std::string>("lidar_frame", "");
 
   this->get_parameter("state_estimation_topic", state_estimation_topic_);
   this->get_parameter("registered_scan_topic", registered_scan_topic_);
+  this->get_parameter("imu_topic", imu_topic_);
   this->get_parameter("odom_frame", odom_frame_);
   this->get_parameter("base_frame", base_frame_);
   this->get_parameter("lidar_frame", lidar_frame_);
 
   base_frame_to_lidar_initialized_ = false;
+  time_start_ = this->now().seconds();
 
   tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
   tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
@@ -35,12 +41,20 @@ LoamInterfaceGNode::LoamInterfaceGNode(const rclcpp::NodeOptions & options)
   odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
     state_estimation_topic_, 5,
     std::bind(&LoamInterfaceGNode::odometryCallback, this, std::placeholders::_1));
+  imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
+    imu_topic_, 5,
+    std::bind(&LoamInterfaceGNode::imuCallback, this, std::placeholders::_1));
 }
 
 void LoamInterfaceGNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg)
 {
   // NOTE: Input point cloud message is based on the `lidar_odom`
   // Here we transform it to the REAL `odom` frame
+  if (!base_frame_to_lidar_initialized_) {
+    RCLCPP_WARN(this->get_logger(), "base_frame_to_lidar isn't initialized!");
+    return;
+  }
+
   auto out = std::make_shared<sensor_msgs::msg::PointCloud2>();
   pcl_ros::transformPointCloud(odom_frame_, tf_odom_to_lidar_odom_, *msg, *out);
   pcd_pub_->publish(*out);
@@ -56,8 +70,7 @@ void LoamInterfaceGNode::odometryCallback(const nav_msgs::msg::Odometry::ConstSh
         base_frame_, lidar_frame_, msg->header.stamp, rclcpp::Duration::from_seconds(0.5));
       tf2::Transform tf_base_frame_to_lidar;
       tf2::fromMsg(tf_stamped.transform, tf_base_frame_to_lidar);
-      
-      // 使用tf_base_frame_to_lidar
+
       tf_odom_to_lidar_odom_ = gravityAlign(tf_base_frame_to_lidar);
 
       base_frame_to_lidar_initialized_ = true;
@@ -100,7 +113,18 @@ inline tf2::Transform LoamInterfaceGNode::gravityAlign(tf2::Transform tf_notALig
   return tf_align;
 }
 
-}  // namespace loam_interface
+void LoamInterfaceGNode::imuCallback(const sensor_msgs::msg::Imu::ConstSharedPtr msg){
+  if (accTotalFromImu(msg) < acc_norm_ * (1.0 - acc_bias_per_)){
+    RCLCPP_WARN(this->get_logger(), "Driving or Mooning!");
+    is_static_ = false;
+  }
+}
+
+inline double LoamInterfaceGNode::accTotalFromImu(const sensor_msgs::msg::Imu::ConstSharedPtr msg){
+  return hypot(msg->linear_acceleration.x, msg->linear_acceleration.y, msg->linear_acceleration.z);
+}
+
+} // namespace loam_interface_g
 
 #include "rclcpp_components/register_node_macro.hpp"
 
