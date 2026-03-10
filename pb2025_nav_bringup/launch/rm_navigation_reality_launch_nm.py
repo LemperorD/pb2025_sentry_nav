@@ -20,7 +20,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, TextSubstitution
+from launch.substitutions import LaunchConfiguration, TextSubstitution,PythonExpression
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterFile
 from nav2_common.launch import RewrittenYaml
@@ -45,7 +45,7 @@ def generate_launch_description():
     rviz_config_file = LaunchConfiguration("rviz_config_file")
     use_robot_state_pub = LaunchConfiguration("use_robot_state_pub")
     use_rviz = LaunchConfiguration("use_rviz")
-
+    behavior_tree_type = LaunchConfiguration("behavior_tree_type")
     # Declare the launch arguments
     declare_namespace_cmd = DeclareLaunchArgument(
         "namespace",
@@ -135,6 +135,12 @@ def generate_launch_description():
         # "use_rviz", default_value="False", description="Whether to start RVIZ"
     )
 
+    declare_behavior_tree_type_cmd = DeclareLaunchArgument(
+        "behavior_tree_type",
+        default_value="decision_simple",
+        description="Select behavior tree type: 'decision_simple' or 'pb2025_sentry_nav'",
+    )
+
     # Create our own temporary YAML files that include substitutions
 
     configured_params = ParameterFile(
@@ -202,6 +208,34 @@ def generate_launch_description():
         }.items(),
     )
 
+    decision_simple_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory("decision_simple"),
+                "launch",
+                "decision_simple.launch.py",
+            )
+        ),
+        condition=IfCondition(
+            PythonExpression(["'", behavior_tree_type, "' == 'decision_simple'"])
+        ),
+    )
+
+    pb2025_behavior_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory("pb2025_sentry_behavior"),
+                "launch",
+                "pb2025_sentry_behavior_launch.py",
+            )
+        ),
+        condition=IfCondition(
+        PythonExpression(
+            ["'", behavior_tree_type, "' == 'pb2025_sentry_behavior'"]
+        )
+    ),
+    )
+
     ld = LaunchDescription()
 
     # Declare the launch options
@@ -225,5 +259,7 @@ def generate_launch_description():
     ld.add_action(bringup_cmd)
     ld.add_action(joy_teleop_cmd)
     ld.add_action(rviz_cmd)
-
+    ld.add_action(declare_behavior_tree_type_cmd)
+    ld.add_action(decision_simple_cmd)
+    ld.add_action(pb2025_behavior_cmd)
     return ld
