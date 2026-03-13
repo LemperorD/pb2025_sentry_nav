@@ -91,7 +91,7 @@ private:
   std::string output_cmd_vel_topic_;
   std::string chassis_mode_topic_;
   float spin_speed_;
-  uint8_t chassis_mode_=2;
+  uint8_t chassis_mode_=1;
   double chassis_followed_yaw_=0.0;
 
   std::mutex cmd_vel_mutex_;
