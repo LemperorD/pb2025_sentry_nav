@@ -262,4 +262,5 @@ def generate_launch_description():
     ld.add_action(declare_behavior_tree_type_cmd)
     ld.add_action(decision_simple_cmd)
     ld.add_action(pb2025_behavior_cmd)
+    
     return ld
