@@ -45,6 +45,7 @@ def generate_launch_description():
     rviz_config_file = LaunchConfiguration("rviz_config_file")
     use_robot_state_pub = LaunchConfiguration("use_robot_state_pub")
     use_rviz = LaunchConfiguration("use_rviz")
+    use_communication = LaunchConfiguration("use_communication")
     behavior_tree_type = LaunchConfiguration("behavior_tree_type")
     # Declare the launch arguments
     declare_namespace_cmd = DeclareLaunchArgument(
@@ -139,6 +140,12 @@ def generate_launch_description():
         "behavior_tree_type",
         default_value="decision_simple",
         description="Select behavior tree type: 'decision_simple' or 'pb2025_sentry_nav'",
+    )
+
+    declare_use_communication_cmd = DeclareLaunchArgument(
+        "use_communication",
+        default_value="True",
+        description="Whether to start the communication node",
     )
 
     # Create our own temporary YAML files that include substitutions
@@ -236,6 +243,15 @@ def generate_launch_description():
     ),
     )
 
+    communication_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(launch_dir, "communication.launch.py")),
+        condition=IfCondition(use_communication),
+        launch_arguments={
+            "namespace": namespace,
+            "use_sim_time": use_sim_time,
+        }.items(),
+    )   
+
     ld = LaunchDescription()
 
     # Declare the launch options
@@ -252,6 +268,7 @@ def generate_launch_description():
     ld.add_action(declare_use_robot_state_pub_cmd)
     ld.add_action(declare_use_rviz_cmd)
     ld.add_action(declare_use_respawn_cmd)
+    ld.add_action(declare_use_communication_cmd)
 
     # Add the actions to launch all of the navigation nodes
     ld.add_action(start_robot_state_publisher_cmd)
@@ -262,5 +279,5 @@ def generate_launch_description():
     ld.add_action(declare_behavior_tree_type_cmd)
     ld.add_action(decision_simple_cmd)
     ld.add_action(pb2025_behavior_cmd)
-    
+    ld.add_action(communication_cmd)
     return ld
