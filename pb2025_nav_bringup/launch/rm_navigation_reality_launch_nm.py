@@ -206,23 +206,12 @@ def generate_launch_description():
         }.items(),
     )
 
-    joy_teleop_cmd = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(launch_dir, "joy_teleop_launch.py")),
+    decision_simple_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(get_package_share_directory("decision_simple"),"launch","decision_simple.launch.py",)),
         launch_arguments={
             "namespace": namespace,
-            "use_sim_time": use_sim_time,
-            "joy_config_file": params_file,
+            "params_file": "/home/sentry-nav/nav2_ws/src/decision_simple/config/decision_simple.yaml",
         }.items(),
-    )
-
-    decision_simple_cmd = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory("decision_simple"),
-                "launch",
-                "decision_simple.launch.py",
-            )
-        ),
         condition=IfCondition(
             PythonExpression(["'", behavior_tree_type, "' == 'decision_simple'"])
         ),
@@ -274,7 +263,6 @@ def generate_launch_description():
     ld.add_action(start_robot_state_publisher_cmd)
     ld.add_action(start_livox_ros_driver2_node)
     ld.add_action(bringup_cmd)
-    ld.add_action(joy_teleop_cmd)
     ld.add_action(rviz_cmd)
     ld.add_action(declare_behavior_tree_type_cmd)
     ld.add_action(decision_simple_cmd)
