@@ -198,8 +198,7 @@ geometry_msgs::msg::Twist FakeVelTransform::transformVelocity( const geometry_ms
   out.linear.y = -twist->linear.x * sin(yaw_diff) + twist->linear.y * cos(yaw_diff);
   if(chassis_mode_ == chassisFollowed){  
     out.angular.z = twist->angular.z; 
-  } 
-  else{
+  } else {
     out.angular.z = twist->angular.z + spin_speed_;
   } 
   return out; 
